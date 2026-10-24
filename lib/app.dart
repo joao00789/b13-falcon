@@ -73,7 +73,9 @@ class _B13FalconAppState extends State<B13FalconApp> {
         return;
       }
       setState(() {
-        _statusMessage = result['message'] as String? ?? 'Não foi possível iniciar a gravação.';
+        _statusMessage =
+            result['message'] as String? ??
+            'Não foi possível iniciar a gravação.';
       });
       return;
     }
@@ -91,7 +93,8 @@ class _B13FalconAppState extends State<B13FalconApp> {
       return;
     }
     setState(() {
-      _statusMessage = result['message'] as String? ?? 'Erro ao encerrar a gravação.';
+      _statusMessage =
+          result['message'] as String? ?? 'Erro ao encerrar a gravação.';
     });
   }
 
@@ -109,7 +112,9 @@ class _B13FalconAppState extends State<B13FalconApp> {
       return;
     }
     setState(() {
-      _statusMessage = result['message'] as String? ?? 'Não foi possível alterar o estado da gravação.';
+      _statusMessage =
+          result['message'] as String? ??
+          'Não foi possível alterar o estado da gravação.';
     });
   }
 

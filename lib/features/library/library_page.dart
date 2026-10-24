@@ -7,9 +7,9 @@ class LibraryPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      _LibraryItem('B13_FALCON_2026_10_24_01.mp4', '42,5 MB', '00:04:12'),
-      _LibraryItem('B13_FALCON_2026_10_20_09.mp4', '27,1 MB', '00:02:46'),
-      _LibraryItem('B13_FALCON_2026_10_18_05.mp4', '58,3 MB', '00:05:33'),
+      const _LibraryItem('B13_FALCON_2026_10_24_01.mp4', '42,5 MB', '00:04:12'),
+      const _LibraryItem('B13_FALCON_2026_10_20_09.mp4', '27,1 MB', '00:02:46'),
+      const _LibraryItem('B13_FALCON_2026_10_18_05.mp4', '58,3 MB', '00:05:33'),
     ];
 
     return Scaffold(
@@ -17,7 +17,7 @@ class LibraryPage extends StatelessWidget {
       body: ListView.separated(
         padding: const EdgeInsets.all(18),
         itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final item = items[index];
           return Container(

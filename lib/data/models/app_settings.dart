@@ -46,15 +46,15 @@ class AppSettings {
   ThemeMode get themeMode => isDarkMode ? ThemeMode.dark : ThemeMode.light;
 
   Map<String, dynamic> toJson() => {
-        'isDarkMode': isDarkMode,
-        'preferredResolution': preferredResolution,
-        'preferredFps': preferredFps,
-        'bitrateKbps': bitrateKbps,
-        'audioMode': audioMode,
-        'keepScreenOn': keepScreenOn,
-        'showFloatingControls': showFloatingControls,
-        'useInternalAudio': useInternalAudio,
-      };
+    'isDarkMode': isDarkMode,
+    'preferredResolution': preferredResolution,
+    'preferredFps': preferredFps,
+    'bitrateKbps': bitrateKbps,
+    'audioMode': audioMode,
+    'keepScreenOn': keepScreenOn,
+    'showFloatingControls': showFloatingControls,
+    'useInternalAudio': useInternalAudio,
+  };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     return AppSettings(

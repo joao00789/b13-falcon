@@ -17,7 +17,9 @@ class VideoPlayerPage extends StatelessWidget {
             SizedBox(height: 12),
             Text('Reprodutor integrado inicializado'),
             SizedBox(height: 8),
-            Text('A reprodução real depende do backend de vídeo do Android e do arquivo gravado.'),
+            Text(
+              'A reprodução real depende do backend de vídeo do Android e do arquivo gravado.',
+            ),
           ],
         ),
       ),

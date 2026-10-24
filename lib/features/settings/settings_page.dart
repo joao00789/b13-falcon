@@ -26,28 +26,32 @@ class SettingsPage extends StatelessWidget {
             title: 'Tema escuro',
             subtitle: 'Ativar ou desativar o tema principal.',
             value: settings.isDarkMode,
-            onChanged: (value) => onChanged(settings.copyWith(isDarkMode: value)),
+            onChanged: (value) =>
+                onChanged(settings.copyWith(isDarkMode: value)),
           ),
           const SizedBox(height: 12),
           _SettingSwitch(
             title: 'Manter tela ligada',
             subtitle: 'Evitar que a tela desligue durante a gravação.',
             value: settings.keepScreenOn,
-            onChanged: (value) => onChanged(settings.copyWith(keepScreenOn: value)),
+            onChanged: (value) =>
+                onChanged(settings.copyWith(keepScreenOn: value)),
           ),
           const SizedBox(height: 12),
           _SettingSwitch(
             title: 'Controles flutuantes',
             subtitle: 'Mostrar painel flutuante opcional.',
             value: settings.showFloatingControls,
-            onChanged: (value) => onChanged(settings.copyWith(showFloatingControls: value)),
+            onChanged: (value) =>
+                onChanged(settings.copyWith(showFloatingControls: value)),
           ),
           const SizedBox(height: 12),
           _SettingSwitch(
             title: 'Áudio interno',
             subtitle: 'Usar áudio interno quando disponível.',
             value: settings.useInternalAudio,
-            onChanged: (value) => onChanged(settings.copyWith(useInternalAudio: value)),
+            onChanged: (value) =>
+                onChanged(settings.copyWith(useInternalAudio: value)),
           ),
           const SizedBox(height: 16),
           Container(
@@ -69,7 +73,9 @@ class SettingsPage extends StatelessWidget {
                         (option) => ChoiceChip(
                           label: Text(option),
                           selected: settings.preferredResolution == option,
-                          onSelected: (_) => onChanged(settings.copyWith(preferredResolution: option)),
+                          onSelected: (_) => onChanged(
+                            settings.copyWith(preferredResolution: option),
+                          ),
                         ),
                       )
                       .toList(),
@@ -119,7 +125,11 @@ class _SettingSwitch extends StatelessWidget {
               children: [
                 Text(title, style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 2),
-                Text(subtitle, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted)),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: AppColors.muted),
+                ),
               ],
             ),
           ),

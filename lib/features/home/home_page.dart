@@ -38,6 +38,17 @@ class HomePage extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.asset(
+                      'logo B13 falcon.png',
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
+                      semanticLabel: 'Logo B13 FALCON',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,7 +63,9 @@ class HomePage extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           'Gravador profissional de tela',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: AppColors.muted,
+                          ),
                         ),
                       ],
                     ),
@@ -98,14 +111,20 @@ class HomePage extends StatelessWidget {
                             height: 60,
                             child: FilledButton.icon(
                               style: FilledButton.styleFrom(
-                                backgroundColor: isRecording ? AppColors.darkRed : AppColors.accent,
+                                backgroundColor: isRecording
+                                    ? AppColors.darkRed
+                                    : AppColors.accent,
                                 foregroundColor: AppColors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(18),
                                 ),
                               ),
                               onPressed: onRecordToggle,
-                              icon: Icon(isRecording ? Icons.stop_rounded : Icons.fiber_manual_record_rounded),
+                              icon: Icon(
+                                isRecording
+                                    ? Icons.stop_rounded
+                                    : Icons.fiber_manual_record_rounded,
+                              ),
                               label: Text(isRecording ? 'Parar' : 'Gravar'),
                             ),
                           ),
@@ -118,7 +137,9 @@ class HomePage extends StatelessWidget {
                               child: OutlinedButton.icon(
                                 onPressed: onPauseToggle,
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: AppColors.border),
+                                  side: const BorderSide(
+                                    color: AppColors.border,
+                                  ),
                                   foregroundColor: AppColors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(18),
@@ -135,7 +156,9 @@ class HomePage extends StatelessWidget {
                     Text(
                       statusMessage,
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: AppColors.muted,
+                      ),
                     ),
                   ],
                 ),
@@ -165,16 +188,31 @@ class HomePage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Recentes', style: theme.textTheme.titleMedium),
-                  TextButton(onPressed: onOpenLibrary, child: const Text('Biblioteca')),
+                  TextButton(
+                    onPressed: onOpenLibrary,
+                    child: const Text('Biblioteca'),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
               Expanded(
                 child: ListView(
                   children: const [
-                    _RecentRecordingItem(name: 'B13_FALCON_2026_10_24_01.mp4', size: '42,5 MB', duration: '00:04:12'),
-                    _RecentRecordingItem(name: 'B13_FALCON_2026_10_22_08.mp4', size: '28,7 MB', duration: '00:02:50'),
-                    _RecentRecordingItem(name: 'B13_FALCON_2026_10_19_21.mp4', size: '57,2 MB', duration: '00:05:33'),
+                    _RecentRecordingItem(
+                      name: 'B13_FALCON_2026_10_24_01.mp4',
+                      size: '42,5 MB',
+                      duration: '00:04:12',
+                    ),
+                    _RecentRecordingItem(
+                      name: 'B13_FALCON_2026_10_22_08.mp4',
+                      size: '28,7 MB',
+                      duration: '00:02:50',
+                    ),
+                    _RecentRecordingItem(
+                      name: 'B13_FALCON_2026_10_19_21.mp4',
+                      size: '57,2 MB',
+                      duration: '00:05:33',
+                    ),
                   ],
                 ),
               ),
@@ -187,7 +225,11 @@ class HomePage extends StatelessWidget {
 }
 
 class _InfoCard extends StatelessWidget {
-  const _InfoCard({required this.title, required this.value, required this.icon});
+  const _InfoCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
 
   final String title;
   final String value;
@@ -222,7 +264,11 @@ class _InfoCard extends StatelessWidget {
 }
 
 class _RecentRecordingItem extends StatelessWidget {
-  const _RecentRecordingItem({required this.name, required this.size, required this.duration});
+  const _RecentRecordingItem({
+    required this.name,
+    required this.size,
+    required this.duration,
+  });
 
   final String name;
   final String size;
@@ -256,11 +302,18 @@ class _RecentRecordingItem extends StatelessWidget {
               children: [
                 Text(name, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
-                Text('$duration • $size', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted)),
+                Text(
+                  '$duration • $size',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: AppColors.muted),
+                ),
               ],
             ),
           ),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.play_arrow_rounded)),
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.play_arrow_rounded),
+          ),
         ],
       ),
     );
