@@ -7,9 +7,7 @@ class RecordingNativeBridge {
     'com.b13.falcon/recorder',
   );
 
-  void setRecordingStatusHandler(
-    ValueChanged<Map<dynamic, dynamic>>? handler,
-  ) {
+  void setRecordingStatusHandler(ValueChanged<Map<dynamic, dynamic>>? handler) {
     _channel.setMethodCallHandler(
       handler == null
           ? null

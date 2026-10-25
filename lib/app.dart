@@ -54,8 +54,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
         _isPaused = false;
         _elapsed = Duration.zero;
       }
-      _statusMessage =
-          status['message'] as String? ?? _statusMessage;
+      _statusMessage = status['message'] as String? ?? _statusMessage;
     });
     if (state == 'stopped' || state == 'error') {
       _timer?.cancel();
@@ -73,8 +72,10 @@ class _B13FalconAppState extends State<B13FalconApp> {
       await _nativeRecorder.setKeepScreenOn(settings.keepScreenOn);
     } on PlatformException catch (error) {
       if (mounted) {
-        setState(() => _statusMessage =
-            'Não foi possível aplicar a opção de tela ligada: ${error.message}');
+        setState(
+          () => _statusMessage =
+              'Não foi possível aplicar a opção de tela ligada: ${error.message}',
+        );
       }
     } on MissingPluginException {
       // Native settings are unavailable in widget previews and non-Android builds.
@@ -130,7 +131,8 @@ class _B13FalconAppState extends State<B13FalconApp> {
           }
         } on PlatformException catch (error) {
           _showMessage(
-            error.message ?? 'Não foi possível solicitar a permissão flutuante.',
+            error.message ??
+                'Não foi possível solicitar a permissão flutuante.',
           );
         } on MissingPluginException {
           _showMessage('Os controles flutuantes estão disponíveis no Android.');
@@ -222,7 +224,9 @@ class _B13FalconAppState extends State<B13FalconApp> {
         );
         return;
       } on MissingPluginException {
-        _showMessage('Esta opção está disponível apenas no aplicativo Android.');
+        _showMessage(
+          'Esta opção está disponível apenas no aplicativo Android.',
+        );
         return;
       }
     }
@@ -420,9 +424,8 @@ class _B13FalconAppState extends State<B13FalconApp> {
           tooltip: _floatingMenuExpanded
               ? 'Fechar menu flutuante'
               : 'Abrir menu flutuante',
-          onPressed: () => setState(
-            () => _floatingMenuExpanded = !_floatingMenuExpanded,
-          ),
+          onPressed: () =>
+              setState(() => _floatingMenuExpanded = !_floatingMenuExpanded),
           child: Icon(
             _floatingMenuExpanded
                 ? Icons.close_rounded

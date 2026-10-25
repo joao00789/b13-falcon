@@ -181,7 +181,8 @@ class HomePage extends StatelessWidget {
                   Expanded(
                     child: _InfoCard(
                       title: 'Qualidade',
-                      value: '${settings.preferredResolution} • ${settings.preferredFps} FPS',
+                      value:
+                          '${settings.preferredResolution} • ${settings.preferredFps} FPS',
                       icon: Icons.high_quality_rounded,
                     ),
                   ),

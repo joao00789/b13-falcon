@@ -125,9 +125,7 @@ class SettingsPage extends StatelessWidget {
                   min: 4,
                   max: 30,
                   divisions: 13,
-                  value: (settings.bitrateKbps / 1000)
-                      .clamp(4, 30)
-                      .toDouble(),
+                  value: (settings.bitrateKbps / 1000).clamp(4, 30).toDouble(),
                   label: '${settings.bitrateKbps ~/ 1000} Mbps',
                   onChanged: (value) => onChanged(
                     settings.copyWith(bitrateKbps: (value * 1000).round()),
