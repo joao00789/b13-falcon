@@ -48,6 +48,7 @@ class RecordingService : Service() {
     private var projection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var encoder: MediaCodec? = null
+    private var encoderInputSurface: Surface? = null
     private var muxer: MediaMuxer? = null
     private var outputUri: Uri? = null
     private var outputFile: File? = null
@@ -104,7 +105,7 @@ class RecordingService : Service() {
             }
             ACTION_RESUME -> {
                 if (recording && paused) {
-                    virtualDisplay?.setSurface(encoder?.inputSurface)
+                    virtualDisplay?.setSurface(encoderInputSurface)
                     paused = false
                     getSystemService(NotificationManager::class.java)
                         .notify(NOTIFICATION_ID, buildNotification("B13 FALCON gravando..."))
@@ -152,9 +153,10 @@ class RecordingService : Service() {
         outputTitle = (intent.getStringExtra("title") ?: "B13_FALCON").replace(Regex("[^A-Za-z0-9_-]"), "_")
 
         val manager = getSystemService(MediaProjectionManager::class.java)
-        projection = manager.getMediaProjection(resultCode, permissionData).also {
-            it.registerCallback(projectionCallback, android.os.Handler(mainLooper))
-        }
+        val activeProjection = manager.getMediaProjection(resultCode, permissionData)
+            ?: throw IOException("O Android não iniciou a projeção da tela.")
+        projection = activeProjection
+        activeProjection.registerCallback(projectionCallback, android.os.Handler(mainLooper))
 
         val format = MediaFormat.createVideoFormat(VIDEO_MIME, displayWidth, displayHeight).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
@@ -162,13 +164,14 @@ class RecordingService : Service() {
             setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
         }
-        encoder = MediaCodec.createEncoderByType(VIDEO_MIME).also {
-            it.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-        }
-        val inputSurface = encoder!!.createInputSurface()
+        val videoEncoder = MediaCodec.createEncoderByType(VIDEO_MIME)
+        videoEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        encoder = videoEncoder
+        val inputSurface = videoEncoder.createInputSurface()
+        encoderInputSurface = inputSurface
         openOutput()
-        encoder!!.start()
-        virtualDisplay = projection!!.createVirtualDisplay(
+        videoEncoder.start()
+        virtualDisplay = activeProjection.createVirtualDisplay(
             "B13 FALCON Capture",
             displayWidth,
             displayHeight,
@@ -261,6 +264,8 @@ class RecordingService : Service() {
         encoder?.runCatching { stop() }
         encoder?.release()
         encoder = null
+        encoderInputSurface?.release()
+        encoderInputSurface = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
         sendStatus("stopped", "Gravação finalizada.")
