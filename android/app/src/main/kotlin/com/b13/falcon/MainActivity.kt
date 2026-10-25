@@ -137,14 +137,14 @@ class MainActivity : FlutterActivity() {
             pendingStartResult = null
             result.success(mapOf("success" to false, "message" to (error.message ?: "Não foi possível solicitar a captura.")))
         }
+    }
 
-        override fun onDestroy() {
-            if (statusReceiverRegistered) {
-                unregisterReceiver(recordingStatusReceiver)
-                statusReceiverRegistered = false
-            }
-            super.onDestroy()
+    override fun onDestroy() {
+        if (statusReceiverRegistered) {
+            unregisterReceiver(recordingStatusReceiver)
+            statusReceiverRegistered = false
         }
+        super.onDestroy()
     }
 
     private fun handleStopRecording(result: MethodChannel.Result) {

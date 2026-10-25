@@ -30,6 +30,7 @@ class FloatingControlsService : Service() {
     private var controlsView: View? = null
     private var drawingView: DrawingOverlayView? = null
     private var paused = false
+    private data class Stroke(val path: Path, val paint: Paint)
 
     private val recordingReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -198,8 +199,6 @@ class FloatingControlsService : Service() {
         context: Context,
         private val onDone: () -> Unit,
     ) : View(context) {
-        private data class Stroke(val path: Path, val paint: Paint)
-
         private val strokes = mutableListOf<Stroke>()
         private var activePath: Path? = null
         private val toolbarPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
