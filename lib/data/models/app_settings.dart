@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 class AppSettings {
   const AppSettings({
     this.isDarkMode = true,
-    this.preferredResolution = '720p',
+    this.preferredResolution = '1080p',
     this.preferredFps = 30,
-    this.bitrateKbps = 8000,
+    this.bitrateKbps = 16000,
     this.audioMode = 'Microfone',
     this.keepScreenOn = true,
-    this.showFloatingControls = false,
+    this.showFloatingControls = true,
     this.useInternalAudio = false,
   });
 
@@ -59,12 +59,12 @@ class AppSettings {
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     return AppSettings(
       isDarkMode: json['isDarkMode'] as bool? ?? true,
-      preferredResolution: json['preferredResolution'] as String? ?? '720p',
+      preferredResolution: json['preferredResolution'] as String? ?? '1080p',
       preferredFps: json['preferredFps'] as int? ?? 30,
-      bitrateKbps: json['bitrateKbps'] as int? ?? 8000,
+      bitrateKbps: json['bitrateKbps'] as int? ?? 16000,
       audioMode: json['audioMode'] as String? ?? 'Microfone',
       keepScreenOn: json['keepScreenOn'] as bool? ?? true,
-      showFloatingControls: json['showFloatingControls'] as bool? ?? false,
+      showFloatingControls: json['showFloatingControls'] as bool? ?? true,
       useInternalAudio: json['useInternalAudio'] as bool? ?? false,
     );
   }

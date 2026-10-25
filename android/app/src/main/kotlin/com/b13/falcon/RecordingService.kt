@@ -41,6 +41,7 @@ class RecordingService : Service() {
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_DATA = "extra_data"
         const val CHANNEL_ID = "b13_falcon_recording"
+        const val STATUS_ACTION = "com.b13.falcon.RECORDING_STATUS"
         private const val NOTIFICATION_ID = 101
         private const val VIDEO_MIME = "video/avc"
     }
@@ -143,13 +144,14 @@ class RecordingService : Service() {
         val maxDimension = when (resolution.lowercase(Locale.ROOT)) {
             "480p" -> 854
             "1080p" -> 1920
+            "1440p" -> 2560
             else -> 1280
         }
         val scale = minOf(1f, maxDimension.toFloat() / maxOf(sourceWidth, sourceHeight))
         displayWidth = ((sourceWidth * scale).toInt() / 2) * 2
         displayHeight = ((sourceHeight * scale).toInt() / 2) * 2
         frameRate = (intent.getIntExtra("fps", 30)).coerceIn(24, 60)
-        bitRate = (intent.getIntExtra("bitrateKbps", 8000) * 1000).coerceAtLeast(500_000)
+        bitRate = (intent.getIntExtra("bitrateKbps", 16000).coerceIn(4_000, 30_000)) * 1000
         outputTitle = (intent.getStringExtra("title") ?: "B13_FALCON").replace(Regex("[^A-Za-z0-9_-]"), "_")
 
         val manager = getSystemService(MediaProjectionManager::class.java)
@@ -292,7 +294,7 @@ class RecordingService : Service() {
     }
 
     private fun sendStatus(state: String, message: String) {
-        sendBroadcast(Intent("com.b13.falcon.RECORDING_STATUS").setPackage(packageName).apply {
+        sendBroadcast(Intent(STATUS_ACTION).setPackage(packageName).apply {
             putExtra("state", state)
             putExtra("message", message)
             putExtra("uri", outputUri?.toString())

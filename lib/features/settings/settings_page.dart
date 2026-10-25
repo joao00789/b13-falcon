@@ -8,17 +8,26 @@ class SettingsPage extends StatelessWidget {
     required this.settings,
     required this.onChanged,
     required this.onReset,
+    required this.onBack,
   });
 
   final AppSettings settings;
   final ValueChanged<AppSettings> onChanged;
   final VoidCallback onReset;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Configurações')),
+      appBar: AppBar(
+        leading: IconButton(
+          onPressed: onBack,
+          tooltip: 'Voltar para início',
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        title: const Text('Configurações'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -39,27 +48,21 @@ class SettingsPage extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _SettingSwitch(
-            title: 'Controles flutuantes',
-            subtitle: 'Mostrar painel flutuante opcional.',
+            title: 'Menu flutuante de gravação',
+            subtitle:
+                'Pausar/retomar, parar e desenhar sobre outros apps. '
+                'O pincel captura os toques até tocar em Concluir.',
             value: settings.showFloatingControls,
             onChanged: (value) =>
                 onChanged(settings.copyWith(showFloatingControls: value)),
-          ),
-          const SizedBox(height: 12),
-          _SettingSwitch(
-            title: 'Áudio interno',
-            subtitle: 'Usar áudio interno quando disponível.',
-            value: settings.useInternalAudio,
-            onChanged: (value) =>
-                onChanged(settings.copyWith(useInternalAudio: value)),
           ),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: theme.dividerColor),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,7 +71,8 @@ class SettingsPage extends StatelessWidget {
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
-                  children: ['480p', '720p', '1080p']
+                  runSpacing: 8,
+                  children: ['480p', '720p', '1080p', '1440p']
                       .map(
                         (option) => ChoiceChip(
                           label: Text(option),
@@ -82,6 +86,65 @@ class SettingsPage extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: theme.dividerColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Taxa de quadros', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [24, 30, 60]
+                      .map(
+                        (fps) => ChoiceChip(
+                          label: Text('$fps FPS'),
+                          selected: settings.preferredFps == fps,
+                          onSelected: (_) =>
+                              onChanged(settings.copyWith(preferredFps: fps)),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Taxa de bits', style: theme.textTheme.titleMedium),
+                    Text('${settings.bitrateKbps ~/ 1000} Mbps'),
+                  ],
+                ),
+                Slider(
+                  min: 4,
+                  max: 30,
+                  divisions: 13,
+                  value: (settings.bitrateKbps / 1000)
+                      .clamp(4, 30)
+                      .toDouble(),
+                  label: '${settings.bitrateKbps ~/ 1000} Mbps',
+                  onChanged: (value) => onChanged(
+                    settings.copyWith(bitrateKbps: (value * 1000).round()),
+                  ),
+                ),
+                Text(
+                  'Valores maiores preservam mais detalhes, mas geram arquivos maiores.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'A gravação captura vídeo da tela. Áudio não está disponível nesta versão.',
+            style: theme.textTheme.bodySmall,
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
           FilledButton.tonalIcon(
@@ -113,9 +176,9 @@ class _SettingSwitch extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Row(
         children: [
