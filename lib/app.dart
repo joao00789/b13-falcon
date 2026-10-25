@@ -364,7 +364,26 @@ class _B13FalconAppState extends State<B13FalconApp> {
             if (!didPop) _goHome();
           },
           child: Scaffold(
-            body: IndexedStack(index: _selectedIndex, children: pages),
+            body: Stack(
+              fit: StackFit.expand,
+              children: List.generate(pages.length, (index) {
+                final selected = _selectedIndex == index;
+                return IgnorePointer(
+                  ignoring: !selected,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeInOut,
+                    opacity: selected ? 1 : 0,
+                    child: AnimatedSlide(
+                      duration: const Duration(milliseconds: 280),
+                      curve: Curves.easeOutCubic,
+                      offset: selected ? Offset.zero : const Offset(0.035, 0),
+                      child: pages[index],
+                    ),
+                  ),
+                );
+              }),
+            ),
             floatingActionButton: _settings.showFloatingControls
                 ? _buildFloatingControls()
                 : null,
@@ -377,62 +396,76 @@ class _B13FalconAppState extends State<B13FalconApp> {
   }
 
   Widget _buildFloatingControls() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        if (_floatingMenuExpanded && _isRecording) ...[
-          FloatingActionButton.small(
-            heroTag: 'floating-stop',
-            tooltip: 'Parar gravação',
-            onPressed: _toggleRecording,
-            child: const Icon(Icons.stop_rounded),
-          ),
-          const SizedBox(height: 10),
-        ],
-        if (_floatingMenuExpanded && !_isRecording) ...[
-          FloatingActionButton.small(
-            heroTag: 'floating-start',
-            tooltip: 'Iniciar gravação',
-            onPressed: _toggleRecording,
-            child: const Icon(Icons.fiber_manual_record_rounded),
-          ),
-          const SizedBox(height: 10),
-        ],
-        if (_floatingMenuExpanded && _isRecording) ...[
-          FloatingActionButton.small(
-            heroTag: 'floating-pause',
-            tooltip: _isPaused ? 'Retomar gravação' : 'Pausar gravação',
-            onPressed: _togglePause,
-            child: Icon(
-              _isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.bottomRight,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (_floatingMenuExpanded && _isRecording) ...[
+            FloatingActionButton.small(
+              heroTag: 'floating-stop',
+              tooltip: 'Parar gravação',
+              onPressed: _toggleRecording,
+              child: const Icon(Icons.stop_rounded),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (_floatingMenuExpanded && !_isRecording) ...[
+            FloatingActionButton.small(
+              heroTag: 'floating-start',
+              tooltip: 'Iniciar gravação',
+              onPressed: _toggleRecording,
+              child: const Icon(Icons.fiber_manual_record_rounded),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (_floatingMenuExpanded && _isRecording) ...[
+            FloatingActionButton.small(
+              heroTag: 'floating-pause',
+              tooltip: _isPaused ? 'Retomar gravação' : 'Pausar gravação',
+              onPressed: _togglePause,
+              child: Icon(
+                _isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (_floatingMenuExpanded) ...[
+            FloatingActionButton.small(
+              heroTag: 'floating-library',
+              tooltip: 'Abrir biblioteca',
+              onPressed: _openLibrary,
+              child: const Icon(Icons.video_library_outlined),
+            ),
+            const SizedBox(height: 10),
+          ],
+          FloatingActionButton(
+            heroTag: 'floating-main',
+            tooltip: _floatingMenuExpanded
+                ? 'Fechar menu flutuante'
+                : 'Abrir menu flutuante',
+            onPressed: () =>
+                setState(() => _floatingMenuExpanded = !_floatingMenuExpanded),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: _floatingMenuExpanded
+                  ? const Icon(Icons.close_rounded, key: ValueKey('close'))
+                  : ClipOval(
+                      key: const ValueKey('logo'),
+                      child: Image.asset(
+                        'logo B13 falcon.png',
+                        fit: BoxFit.cover,
+                        width: 56,
+                        height: 56,
+                      ),
+                    ),
             ),
           ),
-          const SizedBox(height: 10),
         ],
-        if (_floatingMenuExpanded) ...[
-          FloatingActionButton.small(
-            heroTag: 'floating-library',
-            tooltip: 'Abrir biblioteca',
-            onPressed: _openLibrary,
-            child: const Icon(Icons.video_library_outlined),
-          ),
-          const SizedBox(height: 10),
-        ],
-        FloatingActionButton(
-          heroTag: 'floating-main',
-          tooltip: _floatingMenuExpanded
-              ? 'Fechar menu flutuante'
-              : 'Abrir menu flutuante',
-          onPressed: () =>
-              setState(() => _floatingMenuExpanded = !_floatingMenuExpanded),
-          child: Icon(
-            _floatingMenuExpanded
-                ? Icons.close_rounded
-                : Icons.more_horiz_rounded,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -476,21 +509,42 @@ class _B13FalconAppState extends State<B13FalconApp> {
                     });
                     if (index == 1) unawaited(_loadRecordings());
                   },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutCubic,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? Theme.of(context).colorScheme.primary
+                                .withValues(alpha: 0.13)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          destination.$1,
-                          color: selected
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context).iconTheme.color,
+                        AnimatedScale(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutBack,
+                          scale: selected ? 1.08 : 1,
+                          child: Icon(
+                            destination.$1,
+                            color: selected
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).iconTheme.color,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           destination.$2,
-                          style: Theme.of(context).textTheme.labelSmall,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: selected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
+                                fontWeight: selected ? FontWeight.w700 : null,
+                              ),
                         ),
                       ],
                     ),

@@ -25,6 +25,7 @@ class MainActivity : FlutterActivity() {
         const val REQUEST_MEDIA_PROJECTION = 1001
         const val REQUEST_VIDEO_PERMISSION = 1002
         const val REQUEST_OVERLAY_PERMISSION = 1003
+        const val REQUEST_AUDIO_PERMISSION = 1004
     }
 
     private lateinit var channel: MethodChannel
@@ -32,6 +33,7 @@ class MainActivity : FlutterActivity() {
     private var pendingStartResult: MethodChannel.Result? = null
     private var pendingRecordingsResult: MethodChannel.Result? = null
     private var pendingOverlayResult: MethodChannel.Result? = null
+    private var pendingAudioCall: MethodCall? = null
     private var isRecording = false
     private var isPaused = false
     private var statusReceiverRegistered = false
@@ -113,11 +115,30 @@ class MainActivity : FlutterActivity() {
             result.success(mapOf("success" to false, "message" to "Já existe uma gravação em andamento."))
             return
         }
+        val audioMode = call.argument<String>("audioMode") ?: "both"
+        if ((audioMode == "both" || audioMode == "microphone" || audioMode == "Microfone") &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingAudioCall = call
+            pendingStartResult = result
+            requestPermissions(
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                REQUEST_AUDIO_PERMISSION,
+            )
+            return
+        }
+        prepareRecording(call, result, audioMode)
+    }
+
+    private fun prepareRecording(
+        call: MethodCall,
+        result: MethodChannel.Result,
+        audioMode: String,
+    ) {
         val title = call.argument<String>("title") ?: "B13_FALCON_RECORDING"
         val resolution = call.argument<String>("resolution") ?: "720p"
         val fps = call.argument<Int>("fps") ?: 30
         val bitrate = call.argument<Int>("bitrateKbps") ?: 8000
-        val audioMode = call.argument<String>("audioMode") ?: "Microfone"
         val showFloatingControls = call.argument<Boolean>("showFloatingControls") ?: true
         pendingParams = mapOf(
             "title" to title,
@@ -370,7 +391,28 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_VIDEO_PERMISSION) {
+        if (requestCode == REQUEST_AUDIO_PERMISSION) {
+            val call = pendingAudioCall
+            val result = pendingStartResult
+            pendingAudioCall = null
+            pendingStartResult = null
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED &&
+                call != null && result != null
+            ) {
+                prepareRecording(
+                    call,
+                    result,
+                    call.argument<String>("audioMode") ?: "both",
+                )
+            } else {
+                result?.success(
+                    mapOf(
+                        "success" to false,
+                        "message" to "Permita o acesso ao microfone para gravar esse modo de áudio.",
+                    ),
+                )
+            }
+        } else if (requestCode == REQUEST_VIDEO_PERMISSION) {
             val result = pendingRecordingsResult
             pendingRecordingsResult = null
             if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {

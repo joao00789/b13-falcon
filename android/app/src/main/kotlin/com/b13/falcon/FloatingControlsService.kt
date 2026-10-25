@@ -18,6 +18,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -29,6 +30,10 @@ class FloatingControlsService : Service() {
     private lateinit var windowManager: WindowManager
     private var controlsView: View? = null
     private var drawingView: DrawingOverlayView? = null
+    private var actionButtons: LinearLayout? = null
+    private var overlayParams: WindowManager.LayoutParams? = null
+    private var expanded = false
+    private var bubbleDragged = false
     private var paused = false
     private data class Stroke(val path: Path, val paint: Paint)
 
@@ -74,9 +79,22 @@ class FloatingControlsService : Service() {
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            background = roundedBackground(0xE620252D.toInt(), dp(32).toFloat())
+        }
+        val logo = ImageView(this).apply {
+            contentDescription = "Abrir controles de gravação"
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = roundedBackground(0xFFB81C2B.toInt(), dp(28).toFloat())
+            clipToOutline = true
+            setImageDrawable(packageManager.getApplicationIcon(packageName))
+            setOnTouchListener(::handleBubbleTouch)
+        }
+        val buttons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(6), dp(6), dp(6), dp(6))
-            background = roundedBackground(0xE620252D.toInt(), dp(28).toFloat())
+            visibility = if (expanded) View.VISIBLE else View.GONE
         }
         val pauseButton = createButton(if (paused) "▶" else "Ⅱ", "Pausar ou retomar gravação") {
             sendRecordingAction(
@@ -84,22 +102,59 @@ class FloatingControlsService : Service() {
             )
         }
         pauseButton.tag = "pause"
-        panel.addView(pauseButton, buttonLayoutParams())
-        panel.addView(
+        buttons.addView(pauseButton, buttonLayoutParams())
+        buttons.addView(
             createButton("✎", "Ativar pincel para desenhar na tela") {
                 showDrawingLayer()
             },
             buttonLayoutParams(),
         )
-        panel.addView(
+        buttons.addView(
             createButton("×", "Parar gravação") {
                 sendRecordingAction(RecordingService.ACTION_STOP)
             },
             buttonLayoutParams(),
         )
 
+        actionButtons = buttons
+        panel.addView(buttons)
+        panel.addView(logo, LinearLayout.LayoutParams(dp(48), dp(48)))
         controlsView = panel
-        windowManager.addView(panel, overlayLayoutParams())
+        overlayParams = overlayLayoutParams()
+        windowManager.addView(panel, overlayParams)
+    }
+
+    private fun handleBubbleTouch(view: View, event: MotionEvent): Boolean {
+        val params = overlayParams ?: return false
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                bubbleDragged = false
+                view.tag = floatArrayOf(event.rawX, event.rawY, params.x.toFloat(), params.y.toFloat())
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val start = view.tag as? FloatArray ?: return true
+                val deltaX = event.rawX - start[0]
+                val deltaY = event.rawY - start[1]
+                if (kotlin.math.abs(deltaX) > dp(4) || kotlin.math.abs(deltaY) > dp(4)) {
+                    bubbleDragged = true
+                    params.x = (start[2] - deltaX).toInt().coerceAtLeast(0)
+                    params.y = (start[3] + deltaY).toInt()
+                    controlsView?.let { windowManager.updateViewLayout(it, params) }
+                }
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (!bubbleDragged && event.action == MotionEvent.ACTION_UP) {
+                    expanded = !expanded
+                    actionButtons?.visibility = if (expanded) View.VISIBLE else View.GONE
+                    view.contentDescription =
+                        if (expanded) "Fechar controles de gravação" else "Abrir controles de gravação"
+                }
+                return true
+            }
+        }
+        return false
     }
 
     private fun showDrawingLayer() {
@@ -107,6 +162,7 @@ class FloatingControlsService : Service() {
         controlsView?.let {
             windowManager.removeView(it)
             controlsView = null
+            actionButtons = null
         }
         val view = DrawingOverlayView(this) {
             drawingView?.let(windowManager::removeView)
@@ -157,7 +213,7 @@ class FloatingControlsService : Service() {
         PixelFormat.TRANSLUCENT,
     ).apply {
         gravity = Gravity.END or Gravity.CENTER_VERTICAL
-        x = dp(12)
+        x = dp(4)
     }
 
     private fun drawingLayoutParams() = WindowManager.LayoutParams(
@@ -188,6 +244,7 @@ class FloatingControlsService : Service() {
         controlsView?.let(windowManager::removeView)
         drawingView?.let(windowManager::removeView)
         controlsView = null
+        actionButtons = null
         drawingView = null
         unregisterReceiver(recordingReceiver)
         super.onDestroy()

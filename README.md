@@ -20,12 +20,14 @@ B13 FALCON é um aplicativo Android de gravação de tela desenvolvido em Flutte
 
 - Gravação de tela com resoluções de 480p a 1440p, 24/30/60 FPS e taxa de bits ajustável.
 - Menu de navegação flutuante, acesso rápido para gravar/pausar/parar e retorno ao início pelo botão Voltar.
-- Durante a gravação, controles de sobreposição do Android permitem pausar/retomar, parar e desenhar com pincel sobre a tela; o modo de desenho captura os toques até selecionar “Concluir”.
+- Durante a gravação, uma pequena bolha arrastável com a logo abre os controles de pausar/retomar, parar e desenhar sobre a tela.
+- Captura de áudio do jogo e do microfone em uma única faixa, com seleção do modo nas configurações. O áudio interno exige Android 10 ou superior e pode ser bloqueado pelo próprio jogo.
+- Transições animadas entre as telas e animações nos estados de gravação.
 - Biblioteca real dos vídeos em `Movies/B13 Falcon`, com abertura no reprodutor do dispositivo e opção de apagar.
 - Os vídeos recentes também aparecem na tela inicial.
 - Tema claro/escuro e opção para manter a tela ligada durante o uso.
 
-O áudio não é capturado nesta versão. A reprodução é aberta no aplicativo de vídeo instalado no dispositivo.
+Os jogos precisam permitir a captura de áudio interno do Android. A reprodução é aberta no aplicativo de vídeo instalado no dispositivo.
 
 ## Executar localmente
 

@@ -6,7 +6,7 @@ class AppSettings {
     this.preferredResolution = '1080p',
     this.preferredFps = 30,
     this.bitrateKbps = 16000,
-    this.audioMode = 'Microfone',
+    this.audioMode = 'both',
     this.keepScreenOn = true,
     this.showFloatingControls = true,
     this.useInternalAudio = false,
