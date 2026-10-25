@@ -20,7 +20,7 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.media.MediaRecorder
-import android.media.projection.AudioPlaybackCaptureConfiguration
+import android.media.AudioPlaybackCaptureConfiguration
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
