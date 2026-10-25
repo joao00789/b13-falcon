@@ -4,11 +4,15 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -58,5 +62,41 @@ jobs:
           name: b13-falcon-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
 
+      - name: Prepare APK release asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: cp build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/b13-falcon-debug.apk
+
+      - name: Upload APK for GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: b13-falcon-release-apk
+          path: build/app/outputs/flutter-apk/b13-falcon-debug.apk
+
       - name: Provide APK download location
         run: echo "APK disponível no caminho build/app/outputs/flutter-apk/app-debug.apk"
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release APK
+        uses: actions/download-artifact@v4
+        with:
+          name: b13-falcon-release-apk
+          path: release-apk
+
+      - name: Publish GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            release-apk/b13-falcon-debug.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "B13 FALCON $GITHUB_REF_NAME" \
+            --notes "APK de teste gerado pelo GitHub Actions. Esta versão está assinada com a chave de debug." \
+            --prerelease

@@ -28,11 +28,20 @@ flutter build apk --debug
 
 ## Gerar APK
 
-O workflow do GitHub Actions gera o APK em debug e publica como artefato. Também é possível compilar localmente com:
+O workflow do GitHub Actions gera o APK em debug nos pushes para `main` e quando executado manualmente. O arquivo fica disponível como artefato da execução. Também é possível compilar localmente com:
 
 ```bash
 flutter build apk --debug
 ```
+
+Para gerar e publicar um APK de teste em **GitHub Releases**, envie uma tag começando com `v`:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+O workflow compila o APK e cria um pré-lançamento com o arquivo para download. Essas versões usam a chave de assinatura de debug do runner e são destinadas a testes; não são adequadas para publicação na Play Store e podem não atualizar uma instalação assinada por outra execução.
 
 ## Permissões
 
