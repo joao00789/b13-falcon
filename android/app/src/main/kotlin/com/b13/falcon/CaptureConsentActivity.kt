@@ -10,13 +10,38 @@ import android.widget.Toast
 class CaptureConsentActivity : Activity() {
     companion object {
         private const val REQUEST_MEDIA_PROJECTION = 2001
+        private const val REQUEST_NOTIFICATIONS = 2002
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_NOTIFICATIONS,
+            )
+            return
+        }
+        requestCaptureConsent()
+    }
+
+    private fun requestCaptureConsent() {
         val captureIntent = getSystemService(MediaProjectionManager::class.java)
             .createScreenCaptureIntent()
         startActivityForResult(captureIntent, REQUEST_MEDIA_PROJECTION)
+    }
+
+    @Deprecated("Deprecated in Android")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_NOTIFICATIONS) requestCaptureConsent()
     }
 
     @Deprecated("Deprecated in Android")

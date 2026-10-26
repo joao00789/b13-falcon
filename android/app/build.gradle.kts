@@ -27,9 +27,21 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = System.getenv("B13_RELEASE_KEYSTORE_PATH")?.let { file(it) }
+            storePassword = System.getenv("B13_RELEASE_STORE_PASSWORD")
+            keyAlias = System.getenv("B13_RELEASE_KEY_ALIAS")
+            keyPassword = System.getenv("B13_RELEASE_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
 }

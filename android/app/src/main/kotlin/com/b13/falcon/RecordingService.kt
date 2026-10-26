@@ -57,6 +57,8 @@ class RecordingService : Service() {
         private const val AUDIO_SAMPLE_RATE = 48_000
         private const val AUDIO_FRAME_SAMPLES = 960
         private const val PLAYBACK_CHANNELS = 2
+        private const val MAX_PENDING_SAMPLE_COUNT = 600
+        private const val MAX_PENDING_SAMPLE_BYTES = 20L * 1024 * 1024
     }
 
     private data class EncodedSample(
@@ -95,7 +97,8 @@ class RecordingService : Service() {
     private var microphoneReaderThread: Thread? = null
     private var playbackReaderThread: Thread? = null
     private var audioMixerThread: Thread? = null
-    private var audioRequired = false
+    @Volatile private var audioRequired = false
+    @Volatile private var audioCaptureDisabledForBufferLimit = false
     private var microphoneRequired = false
     private var playbackRequired = false
     private var audioChannelCount = 1
@@ -105,6 +108,7 @@ class RecordingService : Service() {
     private val muxerLock = Any()
     private val stopLock = Any()
     private val pendingSamples = mutableListOf<EncodedSample>()
+    private var pendingSampleBytes = 0L
     private val pauseIntervals = mutableListOf<PauseInterval>()
     private var videoClockOffsetUs: Long? = null
     private var videoStartPresentationTimeUs: Long? = null
@@ -270,10 +274,14 @@ class RecordingService : Service() {
             playbackFallback = true
         }
         audioRequired = microphoneRequired || playbackRequired
+        audioCaptureDisabledForBufferLimit = false
         videoTrack = -1
         audioTrack = -1
         muxerStarted = false
-        synchronized(muxerLock) { pendingSamples.clear() }
+        synchronized(muxerLock) {
+            pendingSamples.clear()
+            pendingSampleBytes = 0L
+        }
         synchronized(pauseIntervals) { pauseIntervals.clear() }
         videoClockOffsetUs = null
         videoStartPresentationTimeUs = null
@@ -852,13 +860,17 @@ class RecordingService : Service() {
                 when {
                     index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         synchronized(muxerLock) {
-                            audioTrack = muxer!!.addTrack(localEncoder.outputFormat)
-                            startMuxerIfReady()
+                            if (!audioCaptureDisabledForBufferLimit) {
+                                audioTrack = muxer!!.addTrack(localEncoder.outputFormat)
+                                startMuxerIfReady()
+                            }
                         }
                     }
                     index >= 0 -> {
                         val buffer = localEncoder.getOutputBuffer(index)
-                        if (buffer != null && localBufferInfo.size > 0) {
+                        if (!audioCaptureDisabledForBufferLimit &&
+                            buffer != null && localBufferInfo.size > 0
+                        ) {
                             writeMuxerSample(audioTrack, buffer, localBufferInfo)
                         }
                         outputEnded =
@@ -880,6 +892,7 @@ class RecordingService : Service() {
             .sortedBy { it.info.presentationTimeUs }
             .forEach { sample -> muxer!!.writeSampleData(sample.track, sample.data, sample.info) }
         pendingSamples.clear()
+        pendingSampleBytes = 0L
     }
 
     private fun writeMuxerSample(
@@ -899,10 +912,45 @@ class RecordingService : Service() {
             val info = MediaCodec.BufferInfo().apply {
                 set(0, sourceInfo.size, presentationTimeUs, sourceInfo.flags)
             }
+            if (audioCaptureDisabledForBufferLimit && track != videoTrack) return
             if (muxerStarted) {
                 muxer!!.writeSampleData(track, data, info)
             } else {
-                pendingSamples.add(EncodedSample(track, data, info))
+                if (audioRequired && audioTrack < 0 &&
+                    (pendingSamples.size >= MAX_PENDING_SAMPLE_COUNT ||
+                        pendingSampleBytes + data.remaining() > MAX_PENDING_SAMPLE_BYTES)
+                ) {
+                    audioRequired = false
+                    audioCaptureDisabledForBufferLimit = true
+                    val iterator = pendingSamples.iterator()
+                    while (iterator.hasNext()) {
+                        val pending = iterator.next()
+                        if (pending.track != videoTrack) {
+                            pendingSampleBytes -= pending.info.size
+                            iterator.remove()
+                        }
+                    }
+                    sendStatus(
+                        "recording",
+                        "Áudio não produziu formato a tempo; continuando somente com vídeo.",
+                    )
+                    startMuxerIfReady()
+                }
+                if (muxerStarted) {
+                    if (track == videoTrack) muxer!!.writeSampleData(track, data, info)
+                } else {
+                    while (pendingSamples.isNotEmpty() &&
+                        (pendingSamples.size >= MAX_PENDING_SAMPLE_COUNT ||
+                            pendingSampleBytes + data.remaining() > MAX_PENDING_SAMPLE_BYTES)
+                    ) {
+                        val removed = pendingSamples.removeAt(0)
+                        pendingSampleBytes -= removed.info.size
+                    }
+                    if (data.remaining() <= MAX_PENDING_SAMPLE_BYTES) {
+                        pendingSamples.add(EncodedSample(track, data, info))
+                        pendingSampleBytes += data.remaining()
+                    }
+                }
             }
         }
     }
@@ -1006,16 +1054,38 @@ class RecordingService : Service() {
 
     @Synchronized
     private fun finishOutput() {
+        val shouldPublishOutput = muxerStarted
         runCatching { if (muxerStarted) muxer?.stop() }
         runCatching { muxer?.release() }
         muxer = null
         muxerStarted = false
         runCatching { outputDescriptor?.close() }
         outputDescriptor = null
+        if (!shouldPublishOutput) {
+            outputUri?.let { uri ->
+                if (contentResolver.delete(uri, null, null) == 0) {
+                    throw IOException("Não foi possível apagar a gravação incompleta.")
+                }
+                outputUri = null
+            }
+            outputFile?.let { file ->
+                if (file.exists() && !file.delete()) {
+                    throw IOException("Não foi possível apagar a gravação incompleta.")
+                }
+                outputFile = null
+            }
+            synchronized(muxerLock) {
+                pendingSamples.clear()
+                pendingSampleBytes = 0L
+            }
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             outputUri?.let { uri ->
                 val values = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
-                runCatching { contentResolver.update(uri, values, null, null) }
+                if (contentResolver.update(uri, values, null, null) == 0) {
+                    throw IOException("Não foi possível publicar a gravação finalizada.")
+                }
             }
         } else {
             outputFile?.let { file ->

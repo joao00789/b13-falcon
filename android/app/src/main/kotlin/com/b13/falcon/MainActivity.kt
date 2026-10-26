@@ -24,6 +24,7 @@ class MainActivity : FlutterActivity() {
         const val REQUEST_VIDEO_PERMISSION = 1002
         const val REQUEST_OVERLAY_PERMISSION = 1003
         const val REQUEST_AUDIO_PERMISSION = 1004
+        const val REQUEST_NOTIFICATION_PERMISSION = 1005
     }
 
     private lateinit var channel: MethodChannel
@@ -123,6 +124,21 @@ class MainActivity : FlutterActivity() {
             result.success(mapOf("success" to false, "message" to "Já existe uma gravação em andamento."))
             return
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingAudioCall = call
+            pendingStartResult = result
+            requestPermissions(
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_NOTIFICATION_PERMISSION,
+            )
+            return
+        }
+        prepareStartRecording(call, result)
+    }
+
+    private fun prepareStartRecording(call: MethodCall, result: MethodChannel.Result) {
         val audioMode = call.argument<String>("audioMode") ?: "both"
         if ((audioMode == "both" || audioMode == "microphone" || audioMode == "Microfone") &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
@@ -532,7 +548,15 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_AUDIO_PERMISSION) {
+        if (requestCode == REQUEST_NOTIFICATION_PERMISSION) {
+            val call = pendingAudioCall
+            val result = pendingStartResult
+            pendingAudioCall = null
+            pendingStartResult = null
+            if (call != null && result != null) {
+                prepareStartRecording(call, result)
+            }
+        } else if (requestCode == REQUEST_AUDIO_PERMISSION) {
             val call = pendingAudioCall
             val result = pendingStartResult
             pendingAudioCall = null

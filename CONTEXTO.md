@@ -3,7 +3,7 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual: `1.2.2+8`; branch `main`; a versão `v1.2.1` é a última release publicada.
+- Versão atual: `1.2.2+13`; branch `main`; a versão `v1.2.1` é a última release publicada.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
 - `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos e configuração do overlay.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
@@ -81,6 +81,20 @@
 - Mantido o limite de 4–80 Mbps e adicionados testes para 1440p/90 e resolução nativa.
 - Versão elevada para `1.2.2+11`.
 
+### 2026-10-26 — Commit 5: buffer, falha de saída e notificações
+
+- `pendingSamples` agora fica limitado a 600 amostras e 20 MiB; se o formato de áudio não chega dentro desse limite, o muxer segue sem faixa de áudio e mantém vídeo.
+- Entradas MediaStore/arquivos locais são apagados quando o muxer nunca inicia; falhas ao publicar são reportadas.
+- Android 13+ solicita `POST_NOTIFICATIONS` em runtime nos fluxos iniciados pelo app ou pelo overlay.
+- Versão elevada para `1.2.2+12`.
+
+### 2026-10-26 — Assinatura release e APKs por ABI
+
+- Configurado o build Android release com keystore PKCS12 fixa, R8/minificação e redução de recursos; a chave e os arquivos locais de assinatura são ignorados pelo Git.
+- O workflow exige os secrets `B13_RELEASE_KEYSTORE_BASE64`, `B13_RELEASE_STORE_PASSWORD`, `B13_RELEASE_KEY_ALIAS` e `B13_RELEASE_KEY_PASSWORD`, gera APKs release assinados para cada ABI e anexa os APKs à pré-release criada por tag.
+- Removido o passo KVM sem efeito.
+- Versão elevada para `1.2.2+13`; tag planejada: `v1.2.2`.
+
 ## Decisões e limitações conhecidas
 
 - MediaProjection exige consentimento do usuário em cada nova sessão; o overlay não pode reutilizar consentimento anterior.
@@ -88,14 +102,14 @@
 - Mudança de orientação durante uma gravação não redimensiona o encoder; a orientação é escolhida no início.
 - A captura de áudio interno continua condicionada ao Android e às políticas do jogo/aplicativo de origem.
 - Testes Flutter não exercitam MediaProjection, Android services, codecs nem sobreposições. O ambiente de desenvolvimento pode não ter Android SDK; o CI é responsável pelo build nativo.
-- O signing release deve usar keystore estável guardada em GitHub Secrets; nunca versionar o arquivo ou senhas.
+- A assinatura release depende da keystore PKCS12 e dos quatro secrets do repositório; a keystore local não deve ser versionada nem publicada.
 - O estado da gravação ainda tem cópia local na Activity; o serviço/broadcast é a fonte operacional durante a sessão.
 
 ## Pendências
 
 - Validar em aparelho o início pelo overlay sem trazer o app à frente e a orientação em jogo horizontal.
 - Verificar timestamps, mixagem/ganhos de áudio, limite de amostras pendentes e limpeza de saída em falha.
-- Configurar e validar keystore fixa no GitHub Secrets antes de distribuir APK release; verificar uma atualização sobre instalação já existente.
+- Validar uma atualização de APK assinado sobre uma instalação anterior no aparelho.
 - Validar POST_NOTIFICATIONS no Android 13+, tamanho/qualidade e compatibilidade de codecs em aparelhos reais.
 - Concluir limpeza de permissões antigas e componentes não usados, após confirmar a consulta da biblioteca em cada versão Android suportada.
 
