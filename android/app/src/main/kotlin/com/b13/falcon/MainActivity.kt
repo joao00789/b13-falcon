@@ -1,6 +1,5 @@
 package com.b13.falcon
 
-import android.app.Activity
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -22,11 +21,9 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     companion object {
         const val CHANNEL = "com.b13.falcon/recorder"
-        const val REQUEST_MEDIA_PROJECTION = 1001
         const val REQUEST_VIDEO_PERMISSION = 1002
         const val REQUEST_OVERLAY_PERMISSION = 1003
         const val REQUEST_AUDIO_PERMISSION = 1004
-        const val ACTION_START_FROM_FLOATING = "com.b13.falcon.action.START_FROM_FLOATING"
     }
 
     private lateinit var channel: MethodChannel
@@ -39,7 +36,6 @@ class MainActivity : FlutterActivity() {
     private var isPaused = false
     private var floatingControlsEnabled = true
     private var statusReceiverRegistered = false
-    private var startRequestedFromFloating = false
 
     private val recordingStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -86,9 +82,6 @@ class MainActivity : FlutterActivity() {
                 registerReceiver(recordingStatusReceiver, filter)
             }
             statusReceiverRegistered = true
-        }
-        if (intent?.action == ACTION_START_FROM_FLOATING) {
-            window.decorView.post { startCaptureFromFloating() }
         }
     }
 
@@ -180,66 +173,20 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-        private fun persistRecordingParams(params: Map<String, Any>) {
-            getSharedPreferences("b13_falcon_recording", MODE_PRIVATE).edit()
-                .putString("title", params["title"] as? String)
-                .putString("resolution", params["resolution"] as? String)
-                .putInt("fps", params["fps"] as? Int ?: 30)
-                .putInt("bitrateKbps", params["bitrateKbps"] as? Int ?: 16000)
-                .putString("audioMode", params["audioMode"] as? String ?: "both")
-                .putBoolean("showFloatingControls", params["showFloatingControls"] as? Boolean ?: true)
-                .putFloat("floatingLogoOpacity", (params["floatingLogoOpacity"] as? Double ?: 0.85).toFloat())
-                .putInt("floatingLogoSizeDp", params["floatingLogoSizeDp"] as? Int ?: 56)
-                .putString("codec", params["codec"] as? String ?: "h264")
-                .putString("orientation", params["orientation"] as? String ?: "auto")
-                .putString("bitratePreset", params["bitratePreset"] as? String ?: "custom")
-                .apply()
-        }
-
-        private fun startCaptureFromFloating() {
-            if (isRecording || pendingStartResult != null) return
-            startRequestedFromFloating = true
-            val preferences = getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
-            pendingParams = mapOf(
-                "title" to "B13_FALCON_${System.currentTimeMillis()}",
-                "resolution" to (preferences.getString("resolution", "1080p") ?: "1080p"),
-                "fps" to preferences.getInt("fps", 30),
-                "bitrateKbps" to preferences.getInt("bitrateKbps", 16000),
-                "audioMode" to (preferences.getString("audioMode", "both") ?: "both"),
-                "showFloatingControls" to preferences.getBoolean("showFloatingControls", true),
-                "floatingLogoOpacity" to preferences.getFloat("floatingLogoOpacity", 0.85f).toDouble(),
-                "floatingLogoSizeDp" to preferences.getInt("floatingLogoSizeDp", 56),
-                "codec" to (preferences.getString("codec", "h264") ?: "h264"),
-                "orientation" to (preferences.getString("orientation", "auto") ?: "auto"),
-                "bitratePreset" to (preferences.getString("bitratePreset", "custom") ?: "custom"),
-            )
-            val audioMode = pendingParams?.get("audioMode") as? String ?: "both"
-            if ((audioMode == "both" || audioMode == "microphone" || audioMode == "Microfone") &&
-                checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
-            ) {
-                requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO_PERMISSION)
-            } else {
-                requestMediaProjectionForFloating()
-            }
-        }
-
-        private fun requestMediaProjectionForFloating() {
-            val captureIntent = getSystemService(MediaProjectionManager::class.java)
-                .createScreenCaptureIntent()
-            try {
-                startActivityForResult(captureIntent, REQUEST_MEDIA_PROJECTION)
-            } catch (error: Exception) {
-                pendingParams = null
-                moveTaskToBack(true)
-            }
-        }
-
-        override fun onNewIntent(intent: Intent) {
-            super.onNewIntent(intent)
-            setIntent(intent)
-            if (intent.action == ACTION_START_FROM_FLOATING) {
-                startCaptureFromFloating()
-            }
+    private fun persistRecordingParams(params: Map<String, Any>) {
+        getSharedPreferences("b13_falcon_recording", MODE_PRIVATE).edit()
+            .putString("title", params["title"] as? String)
+            .putString("resolution", params["resolution"] as? String)
+            .putInt("fps", params["fps"] as? Int ?: 30)
+            .putInt("bitrateKbps", params["bitrateKbps"] as? Int ?: 16000)
+            .putString("audioMode", params["audioMode"] as? String ?: "both")
+            .putBoolean("showFloatingControls", params["showFloatingControls"] as? Boolean ?: true)
+            .putFloat("floatingLogoOpacity", (params["floatingLogoOpacity"] as? Double ?: 0.85).toFloat())
+            .putInt("floatingLogoSizeDp", params["floatingLogoSizeDp"] as? Int ?: 56)
+            .putString("codec", params["codec"] as? String ?: "h264")
+            .putString("orientation", params["orientation"] as? String ?: "auto")
+            .putString("bitratePreset", params["bitratePreset"] as? String ?: "custom")
+            .apply()
         }
 
     override fun onDestroy() {
@@ -568,44 +515,6 @@ class MainActivity : FlutterActivity() {
             val result = pendingOverlayResult
             pendingOverlayResult = null
             result?.success(Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this))
-        } else if (requestCode == REQUEST_MEDIA_PROJECTION) {
-            val startResult = pendingStartResult
-            pendingStartResult = null
-            if (resultCode == Activity.RESULT_OK && data != null) {
-                val intent = Intent(this, RecordingService::class.java).apply {
-                    action = RecordingService.ACTION_START
-                    putExtra(RecordingService.EXTRA_RESULT_CODE, resultCode)
-                    putExtra(RecordingService.EXTRA_DATA, data)
-                    pendingParams?.let { params ->
-                        putExtra("resolution", params["resolution"] as String?)
-                        putExtra("fps", params["fps"] as Int?)
-                        putExtra("bitrateKbps", params["bitrateKbps"] as Int?)
-                        putExtra("audioMode", params["audioMode"] as String?)
-                        putExtra("title", params["title"] as String?)
-                        putExtra("codec", params["codec"] as String?)
-                        putExtra("orientation", params["orientation"] as String?)
-                    }
-                }
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        startForegroundService(intent)
-                    } else {
-                        startService(intent)
-                    }
-                    isRecording = true
-                    isPaused = false
-                    startResult?.success(mapOf("success" to true, "message" to "Gravação em andamento."))
-                    if (startRequestedFromFloating) moveTaskToBack(true)
-                } catch (error: Exception) {
-                    isRecording = false
-                    startResult?.success(mapOf("success" to false, "message" to (error.message ?: "Não foi possível iniciar o serviço de gravação.")))
-                }
-            } else {
-                startResult?.success(mapOf("success" to false, "message" to "A autorização de captura foi cancelada."))
-                if (startRequestedFromFloating) moveTaskToBack(true)
-            }
-            pendingParams = null
-            startRequestedFromFloating = false
         }
     }
 
@@ -628,9 +537,6 @@ class MainActivity : FlutterActivity() {
                     result,
                     call.argument<String>("audioMode") ?: "both",
                 )
-            } else if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED &&
-                pendingParams != null) {
-                requestMediaProjectionForFloating()
             } else {
                 result?.success(
                     mapOf(
@@ -638,10 +544,6 @@ class MainActivity : FlutterActivity() {
                         "message" to "Permita o acesso ao microfone para gravar esse modo de áudio.",
                     ),
                 )
-                if (call == null && pendingParams != null) {
-                    pendingParams = null
-                    moveTaskToBack(true)
-                }
             }
         } else if (requestCode == REQUEST_VIDEO_PERMISSION) {
             val result = pendingRecordingsResult

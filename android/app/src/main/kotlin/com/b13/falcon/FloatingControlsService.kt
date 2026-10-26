@@ -225,15 +225,26 @@ class FloatingControlsService : Service() {
     }
 
     private fun startCaptureFromFloating() {
-        val intent = Intent(this, MainActivity::class.java).apply {
-            action = MainActivity.ACTION_START_FROM_FLOATING
-            addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT,
-            )
+        val preferences = getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
+        val intent = Intent(this, CaptureConsentActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra("title", "B13_FALCON_${System.currentTimeMillis()}")
+            putExtra("resolution", preferences.getString("resolution", "1080p"))
+            putExtra("fps", preferences.getInt("fps", 30))
+            putExtra("bitrateKbps", preferences.getInt("bitrateKbps", 16000))
+            putExtra("audioMode", preferences.getString("audioMode", "both"))
+            putExtra("codec", preferences.getString("codec", "h264"))
+            putExtra("orientation", preferences.getString("orientation", "auto"))
         }
-        startActivity(intent)
+        try {
+            startActivity(intent)
+        } catch (error: Exception) {
+            android.widget.Toast.makeText(
+                this,
+                error.message ?: "Não foi possível abrir a autorização de captura.",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
     }
 
     private fun handleBubbleTouch(view: View, event: MotionEvent): Boolean {
