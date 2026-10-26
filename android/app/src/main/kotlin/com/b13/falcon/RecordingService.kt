@@ -17,6 +17,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.media.MediaRecorder
@@ -250,9 +251,10 @@ class RecordingService : Service() {
             setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
             setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+            setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+            setInteger(MediaFormat.KEY_PRIORITY, 0)
         }
-        val videoEncoder = MediaCodec.createEncoderByType(VIDEO_MIME)
-        videoEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        val videoEncoder = createVideoEncoder(format)
         encoder = videoEncoder
         val inputSurface = videoEncoder.createInputSurface()
         encoderInputSurface = inputSurface
@@ -285,6 +287,92 @@ class RecordingService : Service() {
                 "Gravação em andamento."
             },
         )
+    }
+
+    private fun createVideoEncoder(format: MediaFormat): MediaCodec {
+        val candidates = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+            .filter { codecInfo ->
+                codecInfo.isEncoder &&
+                    codecInfo.supportedTypes.any { it.equals(VIDEO_MIME, ignoreCase = true) }
+            }
+            .sortedBy { codecInfo ->
+                val softwareOnly = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    codecInfo.isSoftwareOnly
+                } else {
+                    codecInfo.name.contains("google", ignoreCase = true) ||
+                        codecInfo.name.contains("software", ignoreCase = true)
+                }
+                if (softwareOnly) 1 else 0
+            }
+
+        var lastConfigurationError: Exception? = null
+        for (codecInfo in candidates) {
+            val capabilities = try {
+                codecInfo.getCapabilitiesForType(VIDEO_MIME)
+            } catch (error: IllegalArgumentException) {
+                lastConfigurationError = error
+                continue
+            }
+            if (!capabilities.colorFormats.contains(
+                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface,
+                )
+            ) {
+                continue
+            }
+            val videoCapabilities = capabilities.videoCapabilities
+            val supportsRequestedFormat = try {
+                videoCapabilities.areSizeAndRateSupported(
+                    displayWidth,
+                    displayHeight,
+                    frameRate.toDouble(),
+                )
+            } catch (error: IllegalArgumentException) {
+                lastConfigurationError = error
+                false
+            }
+            if (!supportsRequestedFormat) continue
+
+            val candidate = try {
+                MediaCodec.createByCodecName(codecInfo.name)
+            } catch (error: Exception) {
+                lastConfigurationError = error
+                continue
+            }
+            try {
+                format.setInteger(
+                    MediaFormat.KEY_BIT_RATE,
+                    videoCapabilities.bitrateRange.clamp(bitRate),
+                )
+                candidate.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                return candidate
+            } catch (error: Exception) {
+                candidate.release()
+                lastConfigurationError = error
+            }
+        }
+
+        val fallback = try {
+            MediaCodec.createEncoderByType(VIDEO_MIME)
+        } catch (error: Exception) {
+            throw IOException("O Android não encontrou um codificador de vídeo compatível.", error)
+        }
+        try {
+            val capabilities = fallback.codecInfo.getCapabilitiesForType(VIDEO_MIME)
+            format.setInteger(
+                MediaFormat.KEY_BIT_RATE,
+                capabilities.videoCapabilities.bitrateRange.clamp(bitRate),
+            )
+            fallback.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            return fallback
+        } catch (error: Exception) {
+            fallback.release()
+            lastConfigurationError?.let(error::addSuppressed)
+            throw IOException(
+                "O Android não conseguiu configurar o codificador de vídeo para "
+                    + "${displayWidth}x${displayHeight} a ${frameRate} FPS.",
+                error,
+            )
+        }
     }
 
     private fun prepareAudioCapture(activeProjection: MediaProjection) {

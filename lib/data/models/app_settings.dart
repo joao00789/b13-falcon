@@ -11,6 +11,7 @@ class AppSettings {
     this.showFloatingControls = true,
     this.floatingLogoOpacity = 0.85,
     this.useInternalAudio = false,
+    this.themeAccent = 'falcon',
   });
 
   final bool isDarkMode;
@@ -22,6 +23,7 @@ class AppSettings {
   final bool showFloatingControls;
   final double floatingLogoOpacity;
   final bool useInternalAudio;
+  final String themeAccent;
 
   AppSettings copyWith({
     bool? isDarkMode,
@@ -33,6 +35,7 @@ class AppSettings {
     bool? showFloatingControls,
     double? floatingLogoOpacity,
     bool? useInternalAudio,
+    String? themeAccent,
   }) {
     return AppSettings(
       isDarkMode: isDarkMode ?? this.isDarkMode,
@@ -44,10 +47,18 @@ class AppSettings {
       showFloatingControls: showFloatingControls ?? this.showFloatingControls,
       floatingLogoOpacity: floatingLogoOpacity ?? this.floatingLogoOpacity,
       useInternalAudio: useInternalAudio ?? this.useInternalAudio,
+      themeAccent: themeAccent ?? this.themeAccent,
     );
   }
 
   ThemeMode get themeMode => isDarkMode ? ThemeMode.dark : ThemeMode.light;
+
+  Color get accentColor => switch (themeAccent) {
+    'ocean' => const Color(0xFF168AAD),
+    'emerald' => const Color(0xFF16865A),
+    'violet' => const Color(0xFF7950B8),
+    _ => const Color(0xFFB81C2B),
+  };
 
   Map<String, dynamic> toJson() => {
     'isDarkMode': isDarkMode,
@@ -59,6 +70,7 @@ class AppSettings {
     'showFloatingControls': showFloatingControls,
     'floatingLogoOpacity': floatingLogoOpacity,
     'useInternalAudio': useInternalAudio,
+    'themeAccent': themeAccent,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -77,6 +89,10 @@ class AppSettings {
               .toDouble() ??
           0.85,
       useInternalAudio: json['useInternalAudio'] as bool? ?? false,
+      themeAccent: switch (json['themeAccent'] as String?) {
+        'ocean' || 'emerald' || 'violet' => json['themeAccent'] as String,
+        _ => 'falcon',
+      },
     );
   }
 }

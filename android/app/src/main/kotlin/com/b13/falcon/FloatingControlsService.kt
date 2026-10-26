@@ -7,9 +7,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
+import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -25,6 +28,8 @@ import android.widget.TextView
 import kotlin.math.roundToInt
 
 class FloatingControlsService : Service() {
+    private enum class DrawingTool { FREEHAND, RECTANGLE, CIRCLE }
+
     companion object {
         const val ACTION_DISMISS = "com.b13.falcon.overlay.DISMISS"
         const val ACTION_UPDATE_OPACITY = "com.b13.falcon.overlay.UPDATE_OPACITY"
@@ -43,7 +48,15 @@ class FloatingControlsService : Service() {
     private var brushColor = Color.YELLOW
     private var brushOpacity = 1f
     private var brushWidthDp = 5f
-    private data class Stroke(val path: Path, val paint: Paint)
+    private data class Stroke(
+        val path: Path,
+        val paint: Paint,
+        val tool: DrawingTool = DrawingTool.FREEHAND,
+        val startX: Float = 0f,
+        val startY: Float = 0f,
+        var endX: Float = 0f,
+        var endY: Float = 0f,
+    )
     private val brushColors = listOf(
         Color.YELLOW,
         Color.WHITE,
@@ -366,6 +379,11 @@ class FloatingControlsService : Service() {
                 )
                 setOnClickListener {
                     brushColor = color
+                    val hsv = FloatArray(3)
+                    Color.colorToHSV(color, hsv)
+                    selectedHue = hsv[0]
+                    selectedSaturation = hsv[1]
+                    selectedBrightness = hsv[2]
                     drawingView?.invalidate()
                     populateBrushColors(row)
                 }
@@ -475,76 +493,379 @@ class FloatingControlsService : Service() {
         private val onDone: () -> Unit,
     ) : View(context) {
         private val strokes = mutableListOf<Stroke>()
-        private var activePath: Path? = null
+        private var activeStroke: Stroke? = null
+        private var selectedTool = DrawingTool.FREEHAND
+        private var colorPickerVisible = false
+        private var selectedHue = 60f
+        private var selectedSaturation = 1f
+        private var selectedBrightness = 1f
+        private var activeColorControl = -1
+        private var activeSlider = -1
         private val toolbarPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = 0xE620252D.toInt()
         }
         private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            textSize = dp(16).toFloat()
+            textSize = dp(11).toFloat()
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
         }
-        private val doneBounds get() = width - dp(112)
-        private val clearBounds get() = width - dp(194)
+        private val controlPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val hueColors = intArrayOf(
+            Color.RED,
+            0xFFFF00FF.toInt(),
+            Color.BLUE,
+            Color.CYAN,
+            Color.GREEN,
+            Color.YELLOW,
+            Color.RED,
+        )
+        private val pickerLeft get() = dp(18).toFloat()
+        private val pickerRight get() = width - dp(18).toFloat()
+        private val pickerTop get() = dp(132).toFloat()
+        private val pickerBottom get() = pickerTop + dp(156)
+        private val hueTop get() = pickerBottom + dp(14)
+        private val hueBottom get() = hueTop + dp(18)
+        private val opacityTop get() = hueBottom + dp(18)
+        private val opacityBottom get() = opacityTop + dp(18)
 
         init {
-            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-            contentDescription = "Tela de desenho. Toque em concluir para voltar aos controles."
+            contentDescription =
+                "Ferramentas: cor, pincel livre, caixa, círculo, desfazer e limpar."
         }
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
-            strokes.forEach { canvas.drawPath(it.path, it.paint) }
-            activePath?.let { path ->
-                canvas.drawPath(path, brushPaint())
-            }
+            strokes.forEach { drawStroke(canvas, it) }
+            activeStroke?.let { drawStroke(canvas, it) }
             canvas.drawRoundRect(
                 dp(12).toFloat(),
                 dp(18).toFloat(),
                 width - dp(12).toFloat(),
-                dp(68).toFloat(),
+                dp(112).toFloat(),
                 dp(18).toFloat(),
                 dp(18).toFloat(),
                 toolbarPaint,
             )
-            canvas.drawText("Pincel ativo", dp(26).toFloat(), dp(49).toFloat(), labelPaint)
-            canvas.drawText("Limpar", clearBounds.toFloat(), dp(49).toFloat(), labelPaint)
-            canvas.drawText("Concluir", doneBounds.toFloat(), dp(49).toFloat(), labelPaint)
+            drawToolbar(canvas)
+            if (colorPickerVisible) drawColorPicker(canvas)
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
             val x = event.x
             val y = event.y
-            if (event.action == MotionEvent.ACTION_DOWN && y < dp(76).toFloat()) {
-                if (x >= doneBounds - dp(8)) {
-                    onDone()
-                    return true
-                }
-                if (x >= clearBounds - dp(8)) {
-                    strokes.clear()
-                    invalidate()
-                    return true
+            if (colorPickerVisible && y >= dp(118) && y <= opacityBottom + dp(10)) {
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        activeColorControl = colorControlAt(y)
+                        updateColorControl(x, y)
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (activeColorControl >= 0) updateColorControl(x, y)
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                        activeColorControl = -1
                 }
                 return true
             }
+            if (y < dp(112)) {
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        if (y < dp(68)) {
+                            handleToolTap(x)
+                        } else {
+                            activeSlider = if (x < width / 2f) 0 else 1
+                            updateSlider(x)
+                        }
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (activeSlider >= 0) updateSlider(x)
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> activeSlider = -1
+                }
+                return true
+            }
+
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    activePath = Path().apply { moveTo(x, y) }
+                    activeStroke = Stroke(
+                        path = Path().apply { moveTo(x, y) },
+                        paint = brushPaint(),
+                        tool = selectedTool,
+                        startX = x,
+                        startY = y,
+                        endX = x,
+                        endY = y,
+                    )
                     invalidate()
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    activePath?.lineTo(x, y)
+                    activeStroke?.let { stroke ->
+                        stroke.endX = x
+                        stroke.endY = y
+                        if (stroke.tool == DrawingTool.FREEHAND) stroke.path.lineTo(x, y)
+                    }
                     invalidate()
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    activePath?.let { path ->
-                        strokes.add(Stroke(path, brushPaint()))
-                    }
-                    activePath = null
+                    activeStroke?.let(strokes::add)
+                    activeStroke = null
                     invalidate()
                 }
             }
             return true
+        }
+
+        private fun drawToolbar(canvas: Canvas) {
+            val cellWidth = width / 7f
+            val labels = listOf("Cor", "Livre", "Caixa", "Círculo", "Voltar", "Limpar", "Fechar")
+            labels.forEachIndexed { index, label ->
+                val centerX = cellWidth * (index + 0.5f)
+                val selected = when (index) {
+                    0 -> colorPickerVisible
+                    1 -> selectedTool == DrawingTool.FREEHAND
+                    2 -> selectedTool == DrawingTool.RECTANGLE
+                    3 -> selectedTool == DrawingTool.CIRCLE
+                    else -> false
+                }
+                if (selected) {
+                    controlPaint.color = 0x663A9DFF
+                    canvas.drawRoundRect(
+                        centerX - cellWidth * 0.43f,
+                        dp(22).toFloat(),
+                        centerX + cellWidth * 0.43f,
+                        dp(62).toFloat(),
+                        dp(10).toFloat(),
+                        dp(10).toFloat(),
+                        controlPaint,
+                    )
+                }
+                if (index == 0) {
+                    controlPaint.color = brushColor
+                    controlPaint.alpha = (brushOpacity * 255).roundToInt()
+                    canvas.drawCircle(centerX, dp(34).toFloat(), dp(8).toFloat(), controlPaint)
+                    controlPaint.alpha = 255
+                }
+                canvas.drawText(label, centerX, dp(56).toFloat(), labelPaint)
+            }
+            labelPaint.textAlign = Paint.Align.LEFT
+            labelPaint.textSize = dp(10).toFloat()
+            canvas.drawText("Espessura", dp(20).toFloat(), dp(98).toFloat(), labelPaint)
+            canvas.drawText("Opacidade", (width / 2f + dp(10)).toFloat(), dp(98).toFloat(), labelPaint)
+            drawSlider(
+                canvas,
+                dp(86).toFloat(),
+                (width / 2f - dp(12)).toFloat(),
+                dp(94).toFloat(),
+                (brushWidthDp - 2f) / 18f,
+                brushColor,
+            )
+            drawSlider(
+                canvas,
+                (width / 2f + dp(74)).toFloat(),
+                (width - dp(20)).toFloat(),
+                dp(94).toFloat(),
+                brushOpacity,
+                brushColor,
+            )
+            labelPaint.textAlign = Paint.Align.CENTER
+        }
+
+        private fun drawColorPicker(canvas: Canvas) {
+            canvas.drawRoundRect(
+                dp(12).toFloat(),
+                dp(120).toFloat(),
+                width - dp(12).toFloat(),
+                opacityBottom + dp(12),
+                dp(16).toFloat(),
+                dp(16).toFloat(),
+                toolbarPaint,
+            )
+            val pickerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = LinearGradient(
+                    pickerLeft,
+                    pickerTop,
+                    pickerRight,
+                    pickerTop,
+                    Color.WHITE,
+                    Color.HSVToColor(floatArrayOf(selectedHue, 1f, 1f)),
+                    Shader.TileMode.CLAMP,
+                )
+            }
+            canvas.drawRoundRect(
+                pickerLeft,
+                pickerTop,
+                pickerRight,
+                pickerBottom,
+                dp(8).toFloat(),
+                dp(8).toFloat(),
+                pickerPaint,
+            )
+            pickerPaint.shader = LinearGradient(
+                0f,
+                pickerTop,
+                0f,
+                pickerBottom,
+                0x00000000,
+                Color.BLACK,
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawRoundRect(
+                pickerLeft,
+                pickerTop,
+                pickerRight,
+                pickerBottom,
+                dp(8).toFloat(),
+                dp(8).toFloat(),
+                pickerPaint,
+            )
+            pickerPaint.shader = null
+            pickerPaint.style = Paint.Style.STROKE
+            pickerPaint.strokeWidth = dp(3).toFloat()
+            pickerPaint.color = Color.WHITE
+            val selectedX = pickerLeft + selectedSaturation * (pickerRight - pickerLeft)
+            val selectedY = pickerTop + (1f - selectedBrightness) * (pickerBottom - pickerTop)
+            canvas.drawCircle(selectedX, selectedY, dp(8).toFloat(), pickerPaint)
+
+            pickerPaint.style = Paint.Style.FILL
+            pickerPaint.shader = LinearGradient(
+                pickerLeft,
+                hueTop,
+                pickerRight,
+                hueTop,
+                hueColors,
+                null,
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawRoundRect(
+                pickerLeft,
+                hueTop,
+                pickerRight,
+                hueBottom,
+                dp(8).toFloat(),
+                dp(8).toFloat(),
+                pickerPaint,
+            )
+            pickerPaint.shader = null
+            pickerPaint.style = Paint.Style.STROKE
+            pickerPaint.strokeWidth = dp(3).toFloat()
+            pickerPaint.color = Color.WHITE
+            val hueX = pickerLeft + selectedHue / 360f * (pickerRight - pickerLeft)
+            canvas.drawCircle(hueX, (hueTop + hueBottom) / 2, dp(10).toFloat(), pickerPaint)
+
+            labelPaint.textAlign = Paint.Align.LEFT
+            labelPaint.textSize = dp(10).toFloat()
+            canvas.drawText("Opacidade", pickerLeft, opacityTop - dp(4), labelPaint)
+            drawSlider(
+                canvas,
+                pickerLeft + dp(78),
+                pickerRight,
+                (opacityTop + opacityBottom) / 2,
+                brushOpacity,
+                brushColor,
+            )
+            labelPaint.textAlign = Paint.Align.CENTER
+        }
+
+        private fun drawSlider(
+            canvas: Canvas,
+            left: Float,
+            right: Float,
+            y: Float,
+            value: Float,
+            color: Int,
+        ) {
+            controlPaint.color = 0xFF68717D.toInt()
+            controlPaint.strokeWidth = dp(3).toFloat()
+            controlPaint.strokeCap = Paint.Cap.ROUND
+            canvas.drawLine(left, y, right, y, controlPaint)
+            val thumbX = left + (right - left) * value.coerceIn(0f, 1f)
+            controlPaint.color = color
+            canvas.drawLine(left, y, thumbX, y, controlPaint)
+            canvas.drawCircle(thumbX, y, dp(6).toFloat(), controlPaint)
+        }
+
+        private fun drawStroke(canvas: Canvas, stroke: Stroke) {
+            when (stroke.tool) {
+                DrawingTool.FREEHAND -> canvas.drawPath(stroke.path, stroke.paint)
+                DrawingTool.RECTANGLE -> canvas.drawRect(
+                    minOf(stroke.startX, stroke.endX),
+                    minOf(stroke.startY, stroke.endY),
+                    maxOf(stroke.startX, stroke.endX),
+                    maxOf(stroke.startY, stroke.endY),
+                    stroke.paint,
+                )
+                DrawingTool.CIRCLE -> canvas.drawOval(
+                    RectF(
+                        minOf(stroke.startX, stroke.endX),
+                        minOf(stroke.startY, stroke.endY),
+                        maxOf(stroke.startX, stroke.endX),
+                        maxOf(stroke.startY, stroke.endY),
+                    ),
+                    stroke.paint,
+                )
+            }
+        }
+
+        private fun handleToolTap(x: Float) {
+            when ((x / (width / 7f)).toInt().coerceIn(0, 6)) {
+                0 -> colorPickerVisible = !colorPickerVisible
+                1 -> selectedTool = DrawingTool.FREEHAND
+                2 -> selectedTool = DrawingTool.RECTANGLE
+                3 -> selectedTool = DrawingTool.CIRCLE
+                4 -> if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex)
+                5 -> {
+                    strokes.clear()
+                    activeStroke = null
+                }
+                6 -> onDone()
+            }
+            invalidate()
+        }
+
+        private fun colorControlAt(y: Float): Int = when {
+            y <= pickerBottom -> 0
+            y <= hueBottom -> 1
+            else -> 2
+        }
+
+        private fun updateColorControl(x: Float, y: Float) {
+            when (activeColorControl) {
+                0 -> {
+                    selectedSaturation = ((x - pickerLeft) / (pickerRight - pickerLeft))
+                        .coerceIn(0f, 1f)
+                    selectedBrightness = (1f - (y - pickerTop) / (pickerBottom - pickerTop))
+                        .coerceIn(0f, 1f)
+                    brushColor = Color.HSVToColor(
+                        floatArrayOf(selectedHue, selectedSaturation, selectedBrightness),
+                    )
+                }
+                1 -> {
+                    selectedHue = ((x - pickerLeft) / (pickerRight - pickerLeft) * 360f)
+                        .coerceIn(0f, 360f)
+                    brushColor = Color.HSVToColor(
+                        floatArrayOf(selectedHue, selectedSaturation, selectedBrightness),
+                    )
+                }
+                2 -> brushOpacity =
+                    ((x - pickerLeft) / (pickerRight - pickerLeft)).coerceIn(0.05f, 1f)
+            }
+            invalidate()
+        }
+
+        private fun updateSlider(x: Float) {
+            if (activeSlider == 0) {
+                val left = dp(86).toFloat()
+                val right = (width / 2f - dp(12)).toFloat()
+                brushWidthDp = 2f +
+                    ((x - left) / (right - left)).coerceIn(0f, 1f) * 18f
+            } else {
+                val left = (width / 2f + dp(74)).toFloat()
+                val right = (width - dp(20)).toFloat()
+                brushOpacity =
+                    ((x - left) / (right - left)).coerceIn(0.05f, 1f)
+            }
+            invalidate()
         }
 
         private fun brushPaint() = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -555,5 +876,7 @@ class FloatingControlsService : Service() {
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
+
+        private fun dp(value: Float): Float = value * resources.displayMetrics.density
     }
 }

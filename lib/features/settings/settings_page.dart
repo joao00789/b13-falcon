@@ -43,6 +43,48 @@ class SettingsPage extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           EntranceAnimation(
+            delay: const Duration(milliseconds: 35),
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: theme.dividerColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Cor do tema', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children:
+                        const [
+                          ('falcon', 'Falcon', Color(0xFFB81C2B)),
+                          ('ocean', 'Oceano', Color(0xFF168AAD)),
+                          ('emerald', 'Esmeralda', Color(0xFF16865A)),
+                          ('violet', 'Violeta', Color(0xFF7950B8)),
+                        ].map((option) {
+                          final (key, label, color) = option;
+                          return ChoiceChip(
+                            avatar: CircleAvatar(
+                              backgroundColor: color,
+                              radius: 8,
+                            ),
+                            label: Text(label),
+                            selected: settings.themeAccent == key,
+                            onSelected: (_) =>
+                                onChanged(settings.copyWith(themeAccent: key)),
+                          );
+                        }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          EntranceAnimation(
             delay: const Duration(milliseconds: 55),
             child: _SettingSwitch(
               title: 'Manter tela ligada',

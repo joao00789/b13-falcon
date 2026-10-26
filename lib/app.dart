@@ -378,8 +378,8 @@ class _B13FalconAppState extends State<B13FalconApp> {
       scaffoldMessengerKey: _messengerKey,
       title: AppStrings.appName,
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme(),
-      darkTheme: AppTheme.darkTheme(),
+      theme: AppTheme.lightTheme(accentColor: _settings.accentColor),
+      darkTheme: AppTheme.darkTheme(accentColor: _settings.accentColor),
       themeMode: _settings.themeMode,
       home: Builder(
         builder: (context) => PopScope(

@@ -48,14 +48,20 @@ O workflow do GitHub Actions gera o APK em debug nos pushes para `main` e quando
 flutter build apk --debug
 ```
 
-Para gerar e publicar um APK de teste em **GitHub Releases**, envie uma tag começando com `v`:
+Para controlar versões, use versionamento semântico (`MAJOR.MINOR.PATCH`) nas tags.
+Atualize também o campo `version` em `pubspec.yaml` antes de cada release (o número
+após `+` é o `versionCode` Android, que deve sempre aumentar):
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
-O workflow compila o APK e cria um pré-lançamento com o arquivo para download. Essas versões usam a chave de assinatura de debug do runner e são destinadas a testes; não são adequadas para publicação na Play Store e podem não atualizar uma instalação assinada por outra execução.
+Cada tag `v*` aciona o GitHub Actions, compila o APK e cria um pré-lançamento com
+o arquivo para download. Os builds em `main` ficam disponíveis como artefatos da
+execução. Os APKs usam a chave de debug do runner e são destinados a testes; não
+são adequados para publicação na Play Store e podem não atualizar uma instalação
+assinada por outra execução.
 
 ## Permissões
 

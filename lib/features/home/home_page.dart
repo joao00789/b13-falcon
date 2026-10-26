@@ -104,13 +104,15 @@ class HomePage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
                       color: isRecording
-                          ? AppColors.accent.withValues(alpha: 0.8)
+                          ? theme.colorScheme.primary.withValues(alpha: 0.8)
                           : theme.dividerColor,
                     ),
                     boxShadow: [
                       if (isRecording)
                         BoxShadow(
-                          color: AppColors.accent.withValues(alpha: 0.18),
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.18,
+                          ),
                           blurRadius: 28,
                           spreadRadius: 1,
                         ),
@@ -124,6 +126,7 @@ class HomePage extends StatelessWidget {
                           _RecordingPulse(
                             isActive: isRecording && !isPaused,
                             isRecording: isRecording,
+                            activeColor: theme.colorScheme.primary,
                           ),
                           const SizedBox(width: 9),
                           AnimatedSwitcher(
@@ -170,7 +173,7 @@ class HomePage extends StatelessWidget {
                                 style: FilledButton.styleFrom(
                                   backgroundColor: isRecording
                                       ? AppColors.darkRed
-                                      : AppColors.accent,
+                                      : theme.colorScheme.primary,
                                   foregroundColor: AppColors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16),
@@ -296,10 +299,15 @@ class HomePage extends StatelessWidget {
 }
 
 class _RecordingPulse extends StatefulWidget {
-  const _RecordingPulse({required this.isActive, required this.isRecording});
+  const _RecordingPulse({
+    required this.isActive,
+    required this.isRecording,
+    required this.activeColor,
+  });
 
   final bool isActive;
   final bool isRecording;
+  final Color activeColor;
 
   @override
   State<_RecordingPulse> createState() => _RecordingPulseState();
@@ -334,7 +342,7 @@ class _RecordingPulseState extends State<_RecordingPulse>
   @override
   Widget build(BuildContext context) {
     final color = widget.isRecording
-        ? AppColors.accent
+        ? widget.activeColor
         : Theme.of(context).colorScheme.primary;
     return AnimatedBuilder(
       animation: _controller,
