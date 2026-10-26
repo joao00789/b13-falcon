@@ -45,7 +45,12 @@ class MainActivity : FlutterActivity() {
             if (::channel.isInitialized) {
                 channel.invokeMethod(
                     "recordingStatusChanged",
-                    mapOf("state" to state, "message" to intent.getStringExtra("message")),
+                    mapOf(
+                        "state" to state,
+                        "message" to intent.getStringExtra("message"),
+                        "actualWidth" to intent.getIntExtra("actualWidth", 0).takeIf { it > 0 },
+                        "actualHeight" to intent.getIntExtra("actualHeight", 0).takeIf { it > 0 },
+                    ),
                 )
             }
         }

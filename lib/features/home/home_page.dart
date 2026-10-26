@@ -15,6 +15,7 @@ class HomePage extends StatelessWidget {
     required this.isPaused,
     required this.elapsed,
     required this.statusMessage,
+    this.actualCaptureResolution,
     required this.recordings,
     required this.onRecordToggle,
     required this.onPauseToggle,
@@ -28,6 +29,7 @@ class HomePage extends StatelessWidget {
   final bool isPaused;
   final Duration elapsed;
   final String statusMessage;
+  final String? actualCaptureResolution;
   final List<SavedRecording> recordings;
   final VoidCallback onRecordToggle;
   final VoidCallback onPauseToggle;
@@ -248,7 +250,7 @@ class HomePage extends StatelessWidget {
                       child: _InfoCard(
                         title: 'Qualidade',
                         value:
-                            '${settings.preferredResolution} • ${settings.preferredFps} FPS',
+                            '${actualCaptureResolution ?? settings.preferredResolution} • ${settings.preferredFps} FPS',
                         icon: Icons.high_quality_rounded,
                       ),
                     ),

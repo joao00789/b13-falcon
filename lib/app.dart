@@ -34,6 +34,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
   Timer? _timer;
   int _selectedIndex = 0;
   String _statusMessage = 'Sistema pronto para iniciar a gravação.';
+  String? _actualCaptureResolution;
   String? _recordingsError;
   List<String> _supportedResolutions = const [
     'native',
@@ -87,7 +88,12 @@ class _B13FalconAppState extends State<B13FalconApp> {
   void _onNativeRecordingStatus(Map<dynamic, dynamic> status) {
     if (!mounted) return;
     final state = status['state'] as String?;
+    final actualWidth = status['actualWidth'] as int?;
+    final actualHeight = status['actualHeight'] as int?;
     setState(() {
+      if (actualWidth != null && actualHeight != null) {
+        _actualCaptureResolution = '$actualWidth×$actualHeight';
+      }
       _isRecording = state == 'recording' || state == 'paused';
       _isPaused = state == 'paused';
       if (state == 'stopped' || state == 'error') {
@@ -486,6 +492,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
         isPaused: _isPaused,
         elapsed: _elapsed,
         statusMessage: _statusMessage,
+        actualCaptureResolution: _actualCaptureResolution,
         recordings: _recordings,
         onRecordToggle: _toggleRecording,
         onPauseToggle: _togglePause,

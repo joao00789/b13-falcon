@@ -291,8 +291,13 @@ class RecordingService : Service() {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
             setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
-            setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                setLong(
+                    MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER,
+                    1_000_000L / frameRate,
+                )
+            }
             setInteger(MediaFormat.KEY_PRIORITY, 0)
         }
         val videoEncoder = createVideoEncoder(format)
@@ -331,6 +336,8 @@ class RecordingService : Service() {
                     append(" Áudio interno exige Android 10 ou superior; gravando pelo microfone.")
                 }
             },
+            displayWidth,
+            displayHeight,
         )
     }
 
@@ -408,6 +415,8 @@ class RecordingService : Service() {
                     MediaFormat.KEY_BIT_RATE,
                     videoCapabilities.bitrateRange.clamp(bitRate),
                 )
+                configureEncoderProfile(format, capabilities)
+                configureBitrateMode(format, capabilities)
                 candidate.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                 return candidate
             } catch (error: Exception) {
@@ -427,6 +436,8 @@ class RecordingService : Service() {
                 MediaFormat.KEY_BIT_RATE,
                 capabilities.videoCapabilities.bitrateRange.clamp(bitRate),
             )
+            configureEncoderProfile(format, capabilities)
+            configureBitrateMode(format, capabilities)
             fallback.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             return fallback
         } catch (error: Exception) {
@@ -439,6 +450,37 @@ class RecordingService : Service() {
             )
         }
 
+    }
+
+    private fun configureEncoderProfile(
+        format: MediaFormat,
+        capabilities: MediaCodecInfo.CodecCapabilities,
+    ) {
+        val profile = if (videoMime == HEVC_MIME) {
+            MediaCodecInfo.CodecProfileLevel.HEVCProfileMain
+        } else {
+            MediaCodecInfo.CodecProfileLevel.AVCProfileHigh
+        }
+        if (capabilities.profileLevels.any { it.profile == profile }) {
+            format.setInteger(MediaFormat.KEY_PROFILE, profile)
+        }
+    }
+
+    private fun configureBitrateMode(
+        format: MediaFormat,
+        capabilities: MediaCodecInfo.CodecCapabilities,
+    ) {
+        val encoderCapabilities = capabilities.encoderCapabilities
+        val bitrateMode = if (
+            encoderCapabilities.isBitrateModeSupported(
+                MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR,
+            )
+        ) {
+            MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR
+        } else {
+            MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR
+        }
+        format.setInteger(MediaFormat.KEY_BITRATE_MODE, bitrateMode)
     }
 
     private fun prepareAudioCapture(activeProjection: MediaProjection) {
@@ -982,12 +1024,19 @@ class RecordingService : Service() {
         }
     }
 
-    private fun sendStatus(state: String, message: String) {
+    private fun sendStatus(
+        state: String,
+        message: String,
+        actualWidth: Int? = null,
+        actualHeight: Int? = null,
+    ) {
         sendBroadcast(Intent(STATUS_ACTION).setPackage(packageName).apply {
             putExtra("state", state)
             putExtra("message", message)
             putExtra("uri", outputUri?.toString())
             putExtra("path", outputFile?.absolutePath)
+            actualWidth?.let { putExtra("actualWidth", it) }
+            actualHeight?.let { putExtra("actualHeight", it) }
         })
     }
 

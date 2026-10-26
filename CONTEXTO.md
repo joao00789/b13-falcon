@@ -67,6 +67,13 @@
 - `RecordingService` usa esse snapshot para `auto`; `landscape` mantém o lado maior na largura e a proporção original para o VirtualDisplay/encoder.
 - Versão elevada para `1.2.2+9`.
 
+### 2026-10-26 — Commit 3: parâmetros do encoder e resolução efetiva
+
+- AVC usa perfil High e HEVC usa Main apenas quando o perfil é anunciado pelo encoder; CBR é escolhido quando suportado, com VBR como fallback.
+- Intervalo entre keyframes reduzido para um segundo e `KEY_REPEAT_PREVIOUS_FRAME_AFTER` configurado para manter vídeo em telas estáticas quando a API permite.
+- O tamanho de saída já é limitado à dimensão de origem (`minOf(1f, ...)`), sem upscale. A dimensão efetiva do VirtualDisplay é enviada no evento de gravação para a tela inicial.
+- Versão elevada para `1.2.2+10`.
+
 ## Decisões e limitações conhecidas
 
 - MediaProjection exige consentimento do usuário em cada nova sessão; o overlay não pode reutilizar consentimento anterior.
