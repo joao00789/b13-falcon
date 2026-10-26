@@ -1,5 +1,6 @@
 import 'package:b13_falcon/app.dart';
 import 'package:b13_falcon/data/models/app_settings.dart';
+import 'package:b13_falcon/features/settings/settings_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,12 +21,27 @@ void main() {
   });
 
   testWidgets('audio capture mode can be changed in settings', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await tester.pumpWidget(const B13FalconApp());
-    await tester.pumpAndSettle();
+    var settings = const AppSettings();
 
-    await tester.tap(find.text('Ajustes').first);
-    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            return SettingsPage(
+              settings: settings,
+              onChanged: (nextSettings) {
+                setState(() => settings = nextSettings);
+              },
+              onReset: () {},
+              onBack: () {},
+              supportedResolutions: const ['720p', '1080p'],
+              supportedFps: const [30, 60],
+              hevcSupported: false,
+            );
+          },
+        ),
+      ),
+    );
 
     final gameAudioOption = find.widgetWithText(ChoiceChip, 'Som do jogo');
     expect(tester.widget<ChoiceChip>(gameAudioOption).selected, isFalse);
@@ -35,6 +51,7 @@ void main() {
     await tester.tap(gameAudioOption);
     await tester.pumpAndSettle();
 
+    expect(settings.audioMode, 'internal');
     expect(tester.widget<ChoiceChip>(gameAudioOption).selected, isTrue);
   });
 }

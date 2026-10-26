@@ -1,6 +1,7 @@
 import 'package:b13_falcon/core/constants/app_colors.dart';
 import 'package:b13_falcon/core/constants/app_strings.dart';
 import 'package:b13_falcon/core/utils/formatters.dart';
+import 'package:b13_falcon/core/theme/app_theme_data.dart';
 import 'package:b13_falcon/core/widgets/entrance_animation.dart';
 import 'package:b13_falcon/data/models/app_settings.dart';
 import 'package:b13_falcon/data/models/saved_recording.dart';
@@ -169,23 +170,25 @@ class HomePage extends StatelessWidget {
                           Expanded(
                             child: SizedBox(
                               height: 54,
-                              child: FilledButton.icon(
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: isRecording
-                                      ? AppColors.darkRed
-                                      : theme.colorScheme.primary,
-                                  foregroundColor: AppColors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                              child: ScaleOnPress(
+                                child: FilledButton.icon(
+                                  onPressed: onRecordToggle,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: isRecording
+                                        ? AppColors.darkRed
+                                        : theme.colorScheme.primary,
+                                    foregroundColor: AppColors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
                                   ),
+                                  icon: Icon(
+                                    isRecording
+                                        ? Icons.stop_rounded
+                                        : Icons.fiber_manual_record_rounded,
+                                  ),
+                                  label: Text(isRecording ? 'Parar' : 'Gravar'),
                                 ),
-                                onPressed: onRecordToggle,
-                                icon: Icon(
-                                  isRecording
-                                      ? Icons.stop_rounded
-                                      : Icons.fiber_manual_record_rounded,
-                                ),
-                                label: Text(isRecording ? 'Parar' : 'Gravar'),
                               ),
                             ),
                           ),
@@ -194,22 +197,28 @@ class HomePage extends StatelessWidget {
                             Expanded(
                               child: SizedBox(
                                 height: 54,
-                                child: OutlinedButton.icon(
-                                  onPressed: onPauseToggle,
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor:
-                                        theme.colorScheme.onSurface,
-                                    side: BorderSide(color: theme.dividerColor),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
+                                child: ScaleOnPress(
+                                  child: OutlinedButton.icon(
+                                    onPressed: onPauseToggle,
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor:
+                                          theme.colorScheme.onSurface,
+                                      side: BorderSide(
+                                        color: theme.dividerColor,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                    icon: Icon(
+                                      isPaused
+                                          ? Icons.play_arrow_rounded
+                                          : Icons.pause_rounded,
+                                    ),
+                                    label: Text(
+                                      isPaused ? 'Retomar' : 'Pausar',
                                     ),
                                   ),
-                                  icon: Icon(
-                                    isPaused
-                                        ? Icons.play_arrow_rounded
-                                        : Icons.pause_rounded,
-                                  ),
-                                  label: Text(isPaused ? 'Retomar' : 'Pausar'),
                                 ),
                               ),
                             ),
@@ -316,6 +325,7 @@ class _RecordingPulse extends StatefulWidget {
 class _RecordingPulseState extends State<_RecordingPulse>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  bool _animationsEnabled = true;
 
   @override
   void initState() {
@@ -328,11 +338,22 @@ class _RecordingPulseState extends State<_RecordingPulse>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _animationsEnabled = !MediaQuery.disableAnimationsOf(context);
+    _syncAnimation();
+  }
+
+  @override
   void didUpdateWidget(covariant _RecordingPulse oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isActive && !oldWidget.isActive) {
-      _controller.repeat(reverse: true);
-    } else if (!widget.isActive && oldWidget.isActive) {
+    _syncAnimation();
+  }
+
+  void _syncAnimation() {
+    if (widget.isActive && _animationsEnabled) {
+      if (!_controller.isAnimating) _controller.repeat(reverse: true);
+    } else {
       _controller
         ..stop()
         ..value = 0;
