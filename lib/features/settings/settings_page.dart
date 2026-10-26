@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:b13_falcon/core/constants/app_colors.dart';
 import 'package:b13_falcon/core/theme/app_theme_data.dart';
 import 'package:b13_falcon/core/widgets/entrance_animation.dart';
@@ -14,6 +16,8 @@ class SettingsPage extends StatelessWidget {
     required this.supportedResolutions,
     required this.supportedFps,
     required this.hevcSupported,
+    this.sourceWidth = 1080,
+    this.sourceHeight = 1920,
   });
 
   final AppSettings settings;
@@ -23,6 +27,8 @@ class SettingsPage extends StatelessWidget {
   final List<String> supportedResolutions;
   final List<int> supportedFps;
   final bool hevcSupported;
+  final int sourceWidth;
+  final int sourceHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -394,6 +400,8 @@ class SettingsPage extends StatelessWidget {
                                   settings.preferredResolution,
                                   settings.preferredFps,
                                   value,
+                                  sourceWidth: sourceWidth,
+                                  sourceHeight: sourceHeight,
                                 );
                                 onChanged(
                                   settings.copyWith(
@@ -468,26 +476,39 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  static int recommendedBitrate(String resolution, int fps, String preset) {
-    const pixelCounts = {
-      '360p': 640 * 360,
-      '480p': 854 * 480,
-      '540p': 960 * 540,
-      '720p': 1280 * 720,
-      '1080p': 1920 * 1080,
-      '1440p': 2560 * 1440,
-      'native': 1920 * 1080,
+  static int recommendedBitrate(
+    String resolution,
+    int fps,
+    String preset, {
+    int sourceWidth = 1080,
+    int sourceHeight = 1920,
+  }) {
+    const maxDimensions = {
+      '360p': 640,
+      '480p': 854,
+      '540p': 960,
+      '720p': 1280,
+      '1080p': 1920,
+      '1440p': 2560,
     };
-    final base =
-        (pixelCounts[resolution] ?? pixelCounts['1080p']!) / (1920 * 1080);
-    final fpsFactor = fps / 30;
-    final qualityFactor = switch (preset) {
-      'economy' => 3.5,
-      'high' => 10.0,
-      'maximum' => 32.0,
-      _ => 6.0,
+    final requestedMaxDimension =
+        maxDimensions[resolution] ?? math.max(sourceWidth, sourceHeight);
+    final scale = math.min(
+      1.0,
+      requestedMaxDimension / math.max(sourceWidth, sourceHeight),
+    );
+    final width = (sourceWidth * scale).floor() ~/ 2 * 2;
+    final height = (sourceHeight * scale).floor() ~/ 2 * 2;
+    final bitsPerPixel = switch (preset) {
+      'economy' => 0.08,
+      'high' => 0.20,
+      'maximum' => 0.30,
+      _ => 0.14,
     };
-    return (base * fpsFactor * qualityFactor * 1000).round().clamp(4000, 80000);
+    return (width * height * fps * bitsPerPixel / 1000).round().clamp(
+      4000,
+      80000,
+    );
   }
 
   static double estimatedMegabytesPerMinute(int bitrateKbps) =>
@@ -500,6 +521,8 @@ class SettingsPage extends StatelessWidget {
         nextSettings.preferredResolution,
         nextSettings.preferredFps,
         nextSettings.bitratePreset,
+        sourceWidth: sourceWidth,
+        sourceHeight: sourceHeight,
       ),
     );
   }

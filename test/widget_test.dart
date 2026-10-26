@@ -63,12 +63,34 @@ void main() {
       preferredFps: 90,
     );
 
-    expect(SettingsPage.recommendedBitrate('1440p', 90, 'maximum'), 80000);
+    expect(
+      SettingsPage.recommendedBitrate(
+        '1440p',
+        90,
+        'maximum',
+        sourceWidth: 1440,
+        sourceHeight: 2560,
+      ),
+      80000,
+    );
     expect(
       settings
           .copyWith(bitratePreset: 'maximum', bitrateKbps: 80000)
           .bitrateKbps,
       80000,
+    );
+  });
+
+  test('native bitrate uses the physical display dimensions', () {
+    expect(
+      SettingsPage.recommendedBitrate(
+        'native',
+        30,
+        'high',
+        sourceWidth: 1440,
+        sourceHeight: 3200,
+      ),
+      27648,
     );
   });
 }

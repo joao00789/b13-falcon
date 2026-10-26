@@ -74,6 +74,13 @@
 - O tamanho de saída já é limitado à dimensão de origem (`minOf(1f, ...)`), sem upscale. A dimensão efetiva do VirtualDisplay é enviada no evento de gravação para a tela inicial.
 - Versão elevada para `1.2.2+10`.
 
+### 2026-10-26 — Commit 4: bitrate por bits por pixel
+
+- Os presets agora calculam bitrate por `largura × altura × FPS × bpp`: Economia 0,08; Equilibrada 0,14; Alta 0,20; Máxima 0,30.
+- Dimensões físicas do display são consultadas pelo Android e usadas no preset `native`; as resoluções selecionadas são reduzidas ao tamanho real, sem upscale.
+- Mantido o limite de 4–80 Mbps e adicionados testes para 1440p/90 e resolução nativa.
+- Versão elevada para `1.2.2+11`.
+
 ## Decisões e limitações conhecidas
 
 - MediaProjection exige consentimento do usuário em cada nova sessão; o overlay não pode reutilizar consentimento anterior.

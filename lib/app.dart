@@ -47,6 +47,8 @@ class _B13FalconAppState extends State<B13FalconApp> {
   ];
   List<int> _supportedFps = const [15, 24, 30, 45, 60, 90];
   bool _hevcSupported = false;
+  int _screenWidth = 1080;
+  int _screenHeight = 1920;
 
   @override
   void initState() {
@@ -73,6 +75,8 @@ class _B13FalconAppState extends State<B13FalconApp> {
                 .toList() ??
             _supportedFps;
         _hevcSupported = capabilities['hevc'] as bool? ?? false;
+        _screenWidth = (capabilities['screenWidth'] as int?) ?? _screenWidth;
+        _screenHeight = (capabilities['screenHeight'] as int?) ?? _screenHeight;
       });
     } on PlatformException catch (error) {
       if (mounted) {
@@ -516,6 +520,8 @@ class _B13FalconAppState extends State<B13FalconApp> {
         supportedResolutions: _supportedResolutions,
         supportedFps: _supportedFps,
         hevcSupported: _hevcSupported,
+        sourceWidth: _screenWidth,
+        sourceHeight: _screenHeight,
       ),
     ];
 

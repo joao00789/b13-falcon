@@ -503,6 +503,8 @@ class MainActivity : FlutterActivity() {
                     "resolutions" to supportedResolutions,
                     "fps" to supportedFps,
                     "hevc" to hevcSupported,
+                    "screenWidth" to sourceWidth,
+                    "screenHeight" to sourceHeight,
                 ),
             )
         } catch (error: Exception) {
