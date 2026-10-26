@@ -3,7 +3,7 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual: `1.2.3+14`; branch `main`; a versão `v1.2.1` é a última release publicada.
+- Versão atual: `1.2.3+15`; branch `main`; a versão `v1.2.3` é a última release publicada.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
 - `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos e configuração do overlay.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
@@ -99,8 +99,13 @@
 ### 2026-10-26 — Corrige compilação e prepara nova tag de release
 
 - Definido o código de requisição MediaProjection ausente em `MainActivity`; essa falha impedia o workflow de compilar qualquer APK da tag `v1.2.2`.
-- Elevada a versão para `1.2.3+14`; nova tag planejada: `v1.2.3`, sem mover nem substituir a tag anterior.
+- Elevada a versão para `1.2.3+14`; criada a tag `v1.2.3`, sem mover nem substituir a tag anterior.
 - `dart format`, `flutter analyze` e `flutter test` passaram; a compilação release local não foi possível porque este ambiente não tem Android SDK.
+- O workflow da tag `v1.2.3` concluiu com sucesso e publicou APKs assinados para arm64-v8a, armeabi-v7a e x86_64.
+
+### 2026-10-26 — Atualização do número de build após publicação
+
+- Incrementado o build number para `1.2.3+15` após atualizar o estado da publicação neste contexto.
 
 ## Decisões e limitações conhecidas
 
