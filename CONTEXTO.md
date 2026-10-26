@@ -124,4 +124,5 @@ Mudanças principais:
 - O workflow da tag `v1.2.0` falhou no `flutter analyze` porque o commit inicial não incluiu os arquivos de implementação que acompanham o novo teste de configurações.
 - As alterações restantes de Flutter e Android foram incluídas na correção; o teste permanece isolado em `SettingsPage`.
 - Validação local repetida: `dart format --set-exit-if-changed lib test`, `flutter analyze` e `flutter test` passaram.
-- A compilação do APK e a publicação da release ainda dependem da execução do GitHub Actions.
+- A primeira repetição passou por análise e testes, mas encontrou duas falhas Kotlin no build: a função de suporte do codec estava aninhada dentro do encoder e não podia ser chamada.
+- A função `supportsVideoFormat` foi movida para o escopo da classe. A compilação do APK e a publicação da release dependem da nova execução do GitHub Actions.

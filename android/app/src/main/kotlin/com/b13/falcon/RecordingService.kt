@@ -319,6 +319,26 @@ class RecordingService : Service() {
         )
     }
 
+    private fun supportsVideoFormat(mime: String): Boolean =
+        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { codecInfo ->
+            if (!codecInfo.isEncoder ||
+                codecInfo.supportedTypes.none { it.equals(mime, ignoreCase = true) }
+            ) {
+                false
+            } else {
+                runCatching {
+                    val codecCapabilities = codecInfo.getCapabilitiesForType(mime)
+                    codecCapabilities.colorFormats.contains(
+                        MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface,
+                    ) && codecCapabilities.videoCapabilities.areSizeAndRateSupported(
+                        displayWidth,
+                        displayHeight,
+                        frameRate.toDouble(),
+                    )
+                }.getOrDefault(false)
+            }
+        }
+
     private fun createVideoEncoder(format: MediaFormat): MediaCodec {
         val candidates = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
             .filter { codecInfo ->
@@ -404,25 +424,6 @@ class RecordingService : Service() {
             )
         }
 
-        private fun supportsVideoFormat(mime: String): Boolean =
-            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { codecInfo ->
-                if (!codecInfo.isEncoder ||
-                    codecInfo.supportedTypes.none { it.equals(mime, ignoreCase = true) }
-                ) {
-                    false
-                } else {
-                    runCatching {
-                        val codecCapabilities = codecInfo.getCapabilitiesForType(mime)
-                        codecCapabilities.colorFormats.contains(
-                            MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface,
-                        ) && codecCapabilities.videoCapabilities.areSizeAndRateSupported(
-                            displayWidth,
-                            displayHeight,
-                            frameRate.toDouble(),
-                        )
-                    }.getOrDefault(false)
-                }
-            }
     }
 
     private fun prepareAudioCapture(activeProjection: MediaProjection) {
