@@ -29,6 +29,17 @@ class RecordingNativeBridge {
     }
   }
 
+  Future<Map<String, dynamic>> getVideoCapabilities() async {
+    try {
+      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'getVideoCapabilities',
+      );
+      return Map<String, dynamic>.from(result ?? const <dynamic, dynamic>{});
+    } on PlatformException {
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> startRecording({
     required String title,
     required String resolution,
@@ -37,6 +48,10 @@ class RecordingNativeBridge {
     required String audioMode,
     required bool showFloatingControls,
     required double floatingLogoOpacity,
+    required int floatingLogoSizeDp,
+    required String codec,
+    required String orientation,
+    required String bitratePreset,
   }) async {
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
@@ -49,6 +64,10 @@ class RecordingNativeBridge {
           'audioMode': audioMode,
           'showFloatingControls': showFloatingControls,
           'floatingLogoOpacity': floatingLogoOpacity,
+          'floatingLogoSizeDp': floatingLogoSizeDp,
+          'codec': codec,
+          'orientation': orientation,
+          'bitratePreset': bitratePreset,
         },
       );
       return Map<String, dynamic>.from(result ?? const <dynamic, dynamic>{});
@@ -146,5 +165,38 @@ class RecordingNativeBridge {
     await _channel.invokeMethod<void>('setFloatingLogoOpacity', {
       'opacity': opacity,
     });
+  }
+
+  Future<void> setFloatingLogoSize(int sizeDp) async {
+    await _channel.invokeMethod<void>('setFloatingLogoSize', {
+      'sizeDp': sizeDp,
+    });
+  }
+
+  Future<bool> setFloatingControls({
+    required bool enabled,
+    required double opacity,
+    required int sizeDp,
+    required String resolution,
+    required int fps,
+    required int bitrateKbps,
+    required String audioMode,
+    required String codec,
+    required String orientation,
+    required String bitratePreset,
+  }) async {
+    return await _channel.invokeMethod<bool>('setFloatingControls', {
+          'enabled': enabled,
+          'opacity': opacity,
+          'sizeDp': sizeDp,
+          'resolution': resolution,
+          'fps': fps,
+          'bitrateKbps': bitrateKbps,
+          'audioMode': audioMode,
+          'codec': codec,
+          'orientation': orientation,
+          'bitratePreset': bitratePreset,
+        }) ??
+        false;
   }
 }

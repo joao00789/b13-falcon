@@ -118,3 +118,10 @@ Mudanças principais:
 - `CONTEXTO.md` deve ser atualizada em toda mudança relevante do projeto.
 - A versão em `pubspec.yaml` deve ter o número após o `+` incrementado a cada atualização de build.
 - O trabalho em andamento procura manter estabilidade, qualidade e compatibilidade com Android moderno, enquanto prioriza a experiência de gravação em jogos e apps externos.
+
+### 2026-10-26 — Correção da publicação v1.2.0
+
+- O workflow da tag `v1.2.0` falhou no `flutter analyze` porque o commit inicial não incluiu os arquivos de implementação que acompanham o novo teste de configurações.
+- As alterações restantes de Flutter e Android foram incluídas na correção; o teste permanece isolado em `SettingsPage`.
+- Validação local repetida: `dart format --set-exit-if-changed lib test`, `flutter analyze` e `flutter test` passaram.
+- A compilação do APK e a publicação da release ainda dependem da execução do GitHub Actions.

@@ -52,6 +52,7 @@ class RecordingService : Service() {
         const val STATUS_ACTION = "com.b13.falcon.RECORDING_STATUS"
         private const val NOTIFICATION_ID = 101
         private const val VIDEO_MIME = "video/avc"
+        private const val HEVC_MIME = "video/hevc"
         private const val AUDIO_MIME = "audio/mp4a-latm"
         private const val AUDIO_SAMPLE_RATE = 48_000
         private const val AUDIO_FRAME_SAMPLES = 960
@@ -87,6 +88,7 @@ class RecordingService : Service() {
     private var displayHeight = 0
     private var frameRate = 30
     private var bitRate = 8_000_000
+    private var videoMime = VIDEO_MIME
     private var outputTitle = "B13_FALCON"
     private var drainThread: Thread? = null
     private var audioDrainThread: Thread? = null
@@ -203,20 +205,37 @@ class RecordingService : Service() {
         val displayMetrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(displayMetrics)
-        val sourceWidth = displayMetrics.widthPixels
-        val sourceHeight = displayMetrics.heightPixels
+        var sourceWidth = displayMetrics.widthPixels
+        var sourceHeight = displayMetrics.heightPixels
+        when (intent.getStringExtra("orientation") ?: "auto") {
+            "portrait" -> if (sourceWidth > sourceHeight) {
+                val oldWidth = sourceWidth
+                sourceWidth = sourceHeight
+                sourceHeight = oldWidth
+            }
+            "landscape" -> if (sourceHeight > sourceWidth) {
+                val oldWidth = sourceWidth
+                sourceWidth = sourceHeight
+                sourceHeight = oldWidth
+            }
+        }
         val resolution = intent.getStringExtra("resolution") ?: "720p"
         val maxDimension = when (resolution.lowercase(Locale.ROOT)) {
+            "360p" -> 640
             "480p" -> 854
+            "540p" -> 960
             "1080p" -> 1920
             "1440p" -> 2560
+            "native" -> maxOf(sourceWidth, sourceHeight)
             else -> 1280
         }
         val scale = minOf(1f, maxDimension.toFloat() / maxOf(sourceWidth, sourceHeight))
         displayWidth = ((sourceWidth * scale).toInt() / 2) * 2
         displayHeight = ((sourceHeight * scale).toInt() / 2) * 2
-        frameRate = (intent.getIntExtra("fps", 30)).coerceIn(24, 60)
+        frameRate = (intent.getIntExtra("fps", 30)).coerceIn(15, 90)
         bitRate = (intent.getIntExtra("bitrateKbps", 16000).coerceIn(4_000, 30_000)) * 1000
+        val requestedMime = if (intent.getStringExtra("codec") == "hevc") HEVC_MIME else VIDEO_MIME
+        videoMime = if (supportsVideoFormat(requestedMime)) requestedMime else VIDEO_MIME
         outputTitle = (intent.getStringExtra("title") ?: "B13_FALCON").replace(Regex("[^A-Za-z0-9_-]"), "_")
         val audioMode = when (intent.getStringExtra("audioMode")) {
             "Microfone", "microphone" -> "microphone"
@@ -257,7 +276,7 @@ class RecordingService : Service() {
         activeProjection.registerCallback(projectionCallback, android.os.Handler(mainLooper))
         if (audioRequired) prepareAudioCapture(activeProjection)
 
-        val format = MediaFormat.createVideoFormat(VIDEO_MIME, displayWidth, displayHeight).apply {
+        val format = MediaFormat.createVideoFormat(videoMime, displayWidth, displayHeight).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
             setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
@@ -304,7 +323,7 @@ class RecordingService : Service() {
         val candidates = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
             .filter { codecInfo ->
                 codecInfo.isEncoder &&
-                    codecInfo.supportedTypes.any { it.equals(VIDEO_MIME, ignoreCase = true) }
+                    codecInfo.supportedTypes.any { it.equals(videoMime, ignoreCase = true) }
             }
             .sortedBy { codecInfo ->
                 val softwareOnly = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -319,7 +338,7 @@ class RecordingService : Service() {
         var lastConfigurationError: Exception? = null
         for (codecInfo in candidates) {
             val capabilities = try {
-                codecInfo.getCapabilitiesForType(VIDEO_MIME)
+                codecInfo.getCapabilitiesForType(videoMime)
             } catch (error: IllegalArgumentException) {
                 lastConfigurationError = error
                 continue
@@ -363,12 +382,12 @@ class RecordingService : Service() {
         }
 
         val fallback = try {
-            MediaCodec.createEncoderByType(VIDEO_MIME)
+            MediaCodec.createEncoderByType(videoMime)
         } catch (error: Exception) {
             throw IOException("O Android não encontrou um codificador de vídeo compatível.", error)
         }
         try {
-            val capabilities = fallback.codecInfo.getCapabilitiesForType(VIDEO_MIME)
+            val capabilities = fallback.codecInfo.getCapabilitiesForType(videoMime)
             format.setInteger(
                 MediaFormat.KEY_BIT_RATE,
                 capabilities.videoCapabilities.bitrateRange.clamp(bitRate),
@@ -384,6 +403,26 @@ class RecordingService : Service() {
                 error,
             )
         }
+
+        private fun supportsVideoFormat(mime: String): Boolean =
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { codecInfo ->
+                if (!codecInfo.isEncoder ||
+                    codecInfo.supportedTypes.none { it.equals(mime, ignoreCase = true) }
+                ) {
+                    false
+                } else {
+                    runCatching {
+                        val codecCapabilities = codecInfo.getCapabilitiesForType(mime)
+                        codecCapabilities.colorFormats.contains(
+                            MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface,
+                        ) && codecCapabilities.videoCapabilities.areSizeAndRateSupported(
+                            displayWidth,
+                            displayHeight,
+                            frameRate.toDouble(),
+                        )
+                    }.getOrDefault(false)
+                }
+            }
     }
 
     private fun prepareAudioCapture(activeProjection: MediaProjection) {

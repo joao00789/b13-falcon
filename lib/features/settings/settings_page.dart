@@ -1,4 +1,5 @@
 import 'package:b13_falcon/core/constants/app_colors.dart';
+import 'package:b13_falcon/core/theme/app_theme_data.dart';
 import 'package:b13_falcon/core/widgets/entrance_animation.dart';
 import 'package:b13_falcon/data/models/app_settings.dart';
 import 'package:flutter/material.dart';
@@ -10,16 +11,24 @@ class SettingsPage extends StatelessWidget {
     required this.onChanged,
     required this.onReset,
     required this.onBack,
+    required this.supportedResolutions,
+    required this.supportedFps,
+    required this.hevcSupported,
   });
 
   final AppSettings settings;
   final ValueChanged<AppSettings> onChanged;
   final VoidCallback onReset;
   final VoidCallback onBack;
+  final List<String> supportedResolutions;
+  final List<int> supportedFps;
+  final bool hevcSupported;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final availableFps = {...supportedFps, settings.preferredFps}.toList()
+      ..sort();
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -47,37 +56,32 @@ class SettingsPage extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
+                color: theme.colorScheme.surface.withValues(alpha: 0.88),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: theme.dividerColor),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Cor do tema', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children:
-                        const [
-                          ('falcon', 'Falcon', Color(0xFFB81C2B)),
-                          ('ocean', 'Oceano', Color(0xFF168AAD)),
-                          ('emerald', 'Esmeralda', Color(0xFF16865A)),
-                          ('violet', 'Violeta', Color(0xFF7950B8)),
-                        ].map((option) {
-                          final (key, label, color) = option;
-                          return ChoiceChip(
-                            avatar: CircleAvatar(
-                              backgroundColor: color,
-                              radius: 8,
-                            ),
-                            label: Text(label),
-                            selected: settings.themeAccent == key,
-                            onSelected: (_) =>
-                                onChanged(settings.copyWith(themeAccent: key)),
-                          );
-                        }).toList(),
+                  Text('Temas animados', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 138,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: AppThemeData.themes.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
+                      itemBuilder: (context, index) {
+                        final themeData = AppThemeData.themes[index];
+                        return ThemePreviewCard(
+                          themeData: themeData,
+                          selected: settings.themeAccent == themeData.id,
+                          onTap: () => onChanged(
+                            settings.copyWith(themeAccent: themeData.id),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -186,9 +190,9 @@ class SettingsPage extends StatelessWidget {
                     ],
                   ),
                   Slider(
-                    min: 0.2,
+                    min: 0,
                     max: 1,
-                    divisions: 8,
+                    divisions: 20,
                     value: settings.floatingLogoOpacity,
                     label: '${(settings.floatingLogoOpacity * 100).round()}%',
                     onChanged: (value) => onChanged(
@@ -196,8 +200,31 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'Ajuste a transparência da bolha para ela atrapalhar menos durante o jogo.',
+                    'Com 0%, a bolha fica invisível, mas continua tocável. '
+                    'Ao tocar, um contorno discreto indica onde ela está.',
                     style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Tamanho da bolha',
+                          style: theme.textTheme.titleSmall,
+                        ),
+                      ),
+                      Text('${settings.floatingLogoSizeDp} dp'),
+                    ],
+                  ),
+                  Slider(
+                    min: 32,
+                    max: 96,
+                    divisions: 16,
+                    value: settings.floatingLogoSizeDp.toDouble(),
+                    label: '${settings.floatingLogoSizeDp} dp',
+                    onChanged: (value) => onChanged(
+                      settings.copyWith(floatingLogoSizeDp: value.round()),
+                    ),
                   ),
                 ],
               ),
@@ -216,25 +243,48 @@ class SettingsPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Resolução preferida',
-                    style: theme.textTheme.titleMedium,
-                  ),
+                  Text('Resolução', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: ['480p', '720p', '1080p', '1440p']
-                        .map(
-                          (option) => ChoiceChip(
-                            label: Text(option),
-                            selected: settings.preferredResolution == option,
-                            onSelected: (_) => onChanged(
-                              settings.copyWith(preferredResolution: option),
-                            ),
-                          ),
-                        )
-                        .toList(),
+                    children:
+                        [
+                              'Nativa',
+                              '360p',
+                              '480p',
+                              '540p',
+                              '720p',
+                              '1080p',
+                              '1440p',
+                            ]
+                            .where((option) {
+                              final value = option == 'Nativa'
+                                  ? 'native'
+                                  : option;
+                              return supportedResolutions.contains(value) ||
+                                  value == settings.preferredResolution;
+                            })
+                            .map((option) {
+                              final isSelected =
+                                  settings.preferredResolution == option ||
+                                  (option == 'Nativa' &&
+                                      settings.preferredResolution == 'native');
+                              return ChoiceChip(
+                                label: Text(option),
+                                selected: isSelected,
+                                onSelected: (_) => onChanged(
+                                  _updateAutomaticBitrate(
+                                    settings.copyWith(
+                                      preferredResolution: option == 'Nativa'
+                                          ? 'native'
+                                          : option,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            })
+                            .toList(),
                   ),
                 ],
               ),
@@ -257,39 +307,141 @@ class SettingsPage extends StatelessWidget {
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
-                    children: [24, 30, 60]
+                    children: availableFps
                         .map(
                           (fps) => ChoiceChip(
                             label: Text('$fps FPS'),
                             selected: settings.preferredFps == fps,
-                            onSelected: (_) =>
-                                onChanged(settings.copyWith(preferredFps: fps)),
+                            onSelected: (_) => onChanged(
+                              _updateAutomaticBitrate(
+                                settings.copyWith(preferredFps: fps),
+                              ),
+                            ),
                           ),
                         )
                         .toList(),
                   ),
                   const SizedBox(height: 18),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Taxa de bits', style: theme.textTheme.titleMedium),
-                      Text('${settings.bitrateKbps ~/ 1000} Mbps'),
-                    ],
+                  Text('Codec de vídeo', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children:
+                        [
+                          ('h264', 'H.264'),
+                          if (hevcSupported) ('hevc', 'HEVC / H.265'),
+                        ].map((codec) {
+                          final (value, label) = codec;
+                          return ChoiceChip(
+                            label: Text(label),
+                            selected: settings.codec == value,
+                            onSelected: (_) =>
+                                onChanged(settings.copyWith(codec: value)),
+                          );
+                        }).toList(),
                   ),
-                  Slider(
-                    min: 4,
-                    max: 30,
-                    divisions: 13,
-                    value: (settings.bitrateKbps / 1000)
-                        .clamp(4, 30)
-                        .toDouble(),
-                    label: '${settings.bitrateKbps ~/ 1000} Mbps',
-                    onChanged: (value) => onChanged(
-                      settings.copyWith(bitrateKbps: (value * 1000).round()),
-                    ),
-                  ),
+                  const SizedBox(height: 18),
                   Text(
-                    'Valores maiores preservam mais detalhes, mas geram arquivos maiores.',
+                    'Orientação do vídeo',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children:
+                        const [
+                          ('auto', 'Automática'),
+                          ('portrait', 'Retrato'),
+                          ('landscape', 'Paisagem'),
+                        ].map((orientation) {
+                          final (value, label) = orientation;
+                          return ChoiceChip(
+                            label: Text(label),
+                            selected: settings.orientation == value,
+                            onSelected: (_) => onChanged(
+                              settings.copyWith(orientation: value),
+                            ),
+                          );
+                        }).toList(),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Qualidade do vídeo',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children:
+                        const [
+                          ('economy', 'Economia'),
+                          ('balanced', 'Equilibrada'),
+                          ('high', 'Alta'),
+                          ('maximum', 'Máxima'),
+                          ('custom', 'Personalizada'),
+                        ].map((preset) {
+                          final (value, label) = preset;
+                          return ChoiceChip(
+                            label: Text(label),
+                            selected: settings.bitratePreset == value,
+                            onSelected: (_) {
+                              if (value == 'custom') {
+                                onChanged(
+                                  settings.copyWith(bitratePreset: value),
+                                );
+                              } else {
+                                final bitrate = _recommendedBitrate(
+                                  settings.preferredResolution,
+                                  settings.preferredFps,
+                                  value,
+                                );
+                                onChanged(
+                                  settings.copyWith(
+                                    bitratePreset: value,
+                                    bitrateKbps: bitrate,
+                                  ),
+                                );
+                              }
+                            },
+                          );
+                        }).toList(),
+                  ),
+                  if (settings.bitratePreset == 'custom') ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Taxa de bits',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        Text('${settings.bitrateKbps ~/ 1000} Mbps'),
+                      ],
+                    ),
+                    Slider(
+                      min: 4,
+                      max: 30,
+                      divisions: 13,
+                      value: (settings.bitrateKbps / 1000)
+                          .clamp(4, 30)
+                          .toDouble(),
+                      label: '${settings.bitrateKbps ~/ 1000} Mbps',
+                      onChanged: (value) => onChanged(
+                        settings.copyWith(
+                          bitrateKbps: (value * 1000).round(),
+                          bitratePreset: 'custom',
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Valores maiores preservam mais detalhes, mas geram arquivos maiores.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'Estimativa: ${(_estimatedMegabytesPerMinute(settings.bitrateKbps)).round()} MB por minuto.',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
@@ -313,6 +465,42 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  int _recommendedBitrate(String resolution, int fps, String preset) {
+    const pixelCounts = {
+      '360p': 640 * 360,
+      '480p': 854 * 480,
+      '540p': 960 * 540,
+      '720p': 1280 * 720,
+      '1080p': 1920 * 1080,
+      '1440p': 2560 * 1440,
+      'native': 1920 * 1080,
+    };
+    final base =
+        (pixelCounts[resolution] ?? pixelCounts['1080p']!) / (1920 * 1080);
+    final fpsFactor = fps / 30;
+    final qualityFactor = switch (preset) {
+      'economy' => 3.5,
+      'high' => 10.0,
+      'maximum' => 16.0,
+      _ => 6.0,
+    };
+    return (base * fpsFactor * qualityFactor * 1000).round().clamp(4000, 30000);
+  }
+
+  double _estimatedMegabytesPerMinute(int bitrateKbps) =>
+      ((bitrateKbps + 128) * 60 / 8) / 1000;
+
+  AppSettings _updateAutomaticBitrate(AppSettings nextSettings) {
+    if (nextSettings.bitratePreset == 'custom') return nextSettings;
+    return nextSettings.copyWith(
+      bitrateKbps: _recommendedBitrate(
+        nextSettings.preferredResolution,
+        nextSettings.preferredFps,
+        nextSettings.bitratePreset,
       ),
     );
   }

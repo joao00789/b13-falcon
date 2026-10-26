@@ -10,8 +10,12 @@ class AppSettings {
     this.keepScreenOn = true,
     this.showFloatingControls = true,
     this.floatingLogoOpacity = 0.85,
+    this.floatingLogoSizeDp = 56,
     this.useInternalAudio = false,
     this.themeAccent = 'falcon',
+    this.codec = 'h264',
+    this.orientation = 'auto',
+    this.bitratePreset = 'custom',
   });
 
   final bool isDarkMode;
@@ -22,8 +26,12 @@ class AppSettings {
   final bool keepScreenOn;
   final bool showFloatingControls;
   final double floatingLogoOpacity;
+  final int floatingLogoSizeDp;
   final bool useInternalAudio;
   final String themeAccent;
+  final String codec;
+  final String orientation;
+  final String bitratePreset;
 
   AppSettings copyWith({
     bool? isDarkMode,
@@ -34,8 +42,12 @@ class AppSettings {
     bool? keepScreenOn,
     bool? showFloatingControls,
     double? floatingLogoOpacity,
+    int? floatingLogoSizeDp,
     bool? useInternalAudio,
     String? themeAccent,
+    String? codec,
+    String? orientation,
+    String? bitratePreset,
   }) {
     return AppSettings(
       isDarkMode: isDarkMode ?? this.isDarkMode,
@@ -46,8 +58,12 @@ class AppSettings {
       keepScreenOn: keepScreenOn ?? this.keepScreenOn,
       showFloatingControls: showFloatingControls ?? this.showFloatingControls,
       floatingLogoOpacity: floatingLogoOpacity ?? this.floatingLogoOpacity,
+      floatingLogoSizeDp: floatingLogoSizeDp ?? this.floatingLogoSizeDp,
       useInternalAudio: useInternalAudio ?? this.useInternalAudio,
       themeAccent: themeAccent ?? this.themeAccent,
+      codec: codec ?? this.codec,
+      orientation: orientation ?? this.orientation,
+      bitratePreset: bitratePreset ?? this.bitratePreset,
     );
   }
 
@@ -69,8 +85,12 @@ class AppSettings {
     'keepScreenOn': keepScreenOn,
     'showFloatingControls': showFloatingControls,
     'floatingLogoOpacity': floatingLogoOpacity,
+    'floatingLogoSizeDp': floatingLogoSizeDp,
     'useInternalAudio': useInternalAudio,
     'themeAccent': themeAccent,
+    'codec': codec,
+    'orientation': orientation,
+    'bitratePreset': bitratePreset,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -85,13 +105,27 @@ class AppSettings {
       floatingLogoOpacity:
           (json['floatingLogoOpacity'] as num?)
               ?.toDouble()
-              .clamp(0.2, 1.0)
+              .clamp(0, 1.0)
               .toDouble() ??
           0.85,
+      floatingLogoSizeDp:
+          (json['floatingLogoSizeDp'] as num?)?.toInt().clamp(32, 96) ?? 56,
       useInternalAudio: json['useInternalAudio'] as bool? ?? false,
       themeAccent: switch (json['themeAccent'] as String?) {
         'ocean' || 'emerald' || 'violet' => json['themeAccent'] as String,
         _ => 'falcon',
+      },
+      codec: json['codec'] == 'hevc' ? 'hevc' : 'h264',
+      orientation: switch (json['orientation']) {
+        'portrait' || 'landscape' => json['orientation'] as String,
+        _ => 'auto',
+      },
+      bitratePreset: switch (json['bitratePreset']) {
+        'economy' ||
+        'balanced' ||
+        'high' ||
+        'maximum' => json['bitratePreset'] as String,
+        _ => 'custom',
       },
     );
   }

@@ -1,5 +1,9 @@
 package com.b13.falcon
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -25,6 +29,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.core.app.NotificationCompat
 import kotlin.math.roundToInt
 
 class FloatingControlsService : Service() {
@@ -33,6 +38,9 @@ class FloatingControlsService : Service() {
     companion object {
         const val ACTION_DISMISS = "com.b13.falcon.overlay.DISMISS"
         const val ACTION_UPDATE_OPACITY = "com.b13.falcon.overlay.UPDATE_OPACITY"
+        const val ACTION_UPDATE_SIZE = "com.b13.falcon.overlay.UPDATE_SIZE"
+        private const val CHANNEL_ID = "b13_falcon_floating"
+        private const val NOTIFICATION_ID = 102
     }
 
     private lateinit var windowManager: WindowManager
@@ -40,11 +48,17 @@ class FloatingControlsService : Service() {
     private var settingsView: View? = null
     private var drawingView: DrawingOverlayView? = null
     private var actionButtons: LinearLayout? = null
+    private var startButton: TextView? = null
+    private var pauseButton: TextView? = null
+    private var drawButton: TextView? = null
+    private var stopButton: TextView? = null
     private var overlayParams: WindowManager.LayoutParams? = null
     private var expanded = false
     private var bubbleDragged = false
     private var paused = false
+    private var recording = false
     private var logoOpacity = 0.85f
+    private var logoSizeDp = 56
     private var brushColor = Color.YELLOW
     private var brushOpacity = 1f
     private var brushWidthDp = 5f
@@ -71,14 +85,20 @@ class FloatingControlsService : Service() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.getStringExtra("state")) {
                 "paused" -> {
+                    recording = true
                     paused = true
-                    refreshPauseButton()
+                    refreshControls()
                 }
                 "recording" -> {
+                    recording = true
                     paused = false
-                    refreshPauseButton()
+                    refreshControls()
                 }
-                "stopped", "error" -> stopSelf()
+                "stopped", "error" -> {
+                    recording = false
+                    paused = false
+                    refreshControls()
+                }
             }
         }
     }
@@ -86,6 +106,7 @@ class FloatingControlsService : Service() {
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        createNotificationChannel()
         val filter = IntentFilter(RecordingService.STATUS_ACTION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(recordingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -97,13 +118,18 @@ class FloatingControlsService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_DISMISS) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         } else if (intent?.action == ACTION_UPDATE_OPACITY) {
             updateLogoOpacity(intent)
+        } else if (intent?.action == ACTION_UPDATE_SIZE) {
+            updateLogoSize(intent)
         } else {
             logoOpacity = (intent?.getDoubleExtra("logoOpacity", 0.85) ?: 0.85)
                 .toFloat()
-                .coerceIn(0.2f, 1f)
+                .coerceIn(0f, 1f)
+            logoSizeDp = (intent?.getIntExtra("sizeDp", 56) ?: 56).coerceIn(32, 96)
+            startForegroundCompat(buildNotification())
             showControls()
         }
         return START_NOT_STICKY
@@ -113,8 +139,19 @@ class FloatingControlsService : Service() {
         logoOpacity = (intent?.getDoubleExtra("logoOpacity", logoOpacity.toDouble())
             ?: logoOpacity.toDouble())
             .toFloat()
-            .coerceIn(0.2f, 1f)
+            .coerceIn(0f, 1f)
         controlsView?.findViewWithTag<ImageView>("bubble_logo")?.alpha = logoOpacity
+    }
+
+    private fun updateLogoSize(intent: Intent?) {
+        logoSizeDp = (intent?.getIntExtra("sizeDp", logoSizeDp) ?: logoSizeDp)
+            .coerceIn(32, 96)
+        controlsView?.let {
+            windowManager.removeView(it)
+            controlsView = null
+            actionButtons = null
+            showControls()
+        }
     }
 
     private fun showControls() {
@@ -127,52 +164,70 @@ class FloatingControlsService : Service() {
             background = roundedBackground(0xE620252D.toInt(), dp(32).toFloat())
         }
         val logo = ImageView(this).apply {
-            contentDescription = "Abrir controles de gravação"
+            contentDescription = "Abrir controles flutuantes"
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = roundedBackground(0xFFB81C2B.toInt(), dp(28).toFloat())
+            background = roundedBackground(0xFFB81C2B.toInt(), dp(logoSizeDp / 2).toFloat())
             clipToOutline = true
             alpha = logoOpacity
             tag = "bubble_logo"
             setImageDrawable(packageManager.getApplicationIcon(packageName))
             setOnTouchListener(::handleBubbleTouch)
+            foreground = roundedOutline()
         }
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             visibility = if (expanded) View.VISIBLE else View.GONE
         }
-        val pauseButton = createButton(if (paused) "▶" else "Ⅱ", "Pausar ou retomar gravação") {
+        pauseButton = createButton(if (paused) "▶" else "Ⅱ", "Pausar ou retomar gravação") {
             sendRecordingAction(
                 if (paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE,
             )
+        }.also {
+            it.tag = "pause"
+            buttons.addView(it, buttonLayoutParams())
         }
-        pauseButton.tag = "pause"
-        buttons.addView(pauseButton, buttonLayoutParams())
-        buttons.addView(
-            createButton("✎", "Ativar pincel para desenhar na tela") {
-                showDrawingLayer()
-            },
-            buttonLayoutParams(),
-        )
+        startButton = createButton("●", "Iniciar gravação") {
+            startCaptureFromFloating()
+        }.also { buttons.addView(it, buttonLayoutParams()) }
+        drawButton = createButton("✎", "Ativar pincel para desenhar na tela") {
+            showDrawingLayer()
+        }.also { buttons.addView(it, buttonLayoutParams()) }
         buttons.addView(
             createButton("⚙", "Configurar pincel e opacidade") {
                 showSettingsPanel()
             },
             buttonLayoutParams(),
         )
+        stopButton = createButton("×", "Parar gravação") {
+            sendRecordingAction(RecordingService.ACTION_STOP)
+        }.also { buttons.addView(it, buttonLayoutParams()) }
         buttons.addView(
-            createButton("×", "Parar gravação") {
-                sendRecordingAction(RecordingService.ACTION_STOP)
+            createButton("✕", "Fechar controles flutuantes") {
+                startService(Intent(this, FloatingControlsService::class.java).setAction(ACTION_DISMISS))
             },
             buttonLayoutParams(),
         )
 
         actionButtons = buttons
         panel.addView(buttons)
-        panel.addView(logo, LinearLayout.LayoutParams(dp(48), dp(48)))
+        panel.addView(logo, LinearLayout.LayoutParams(dp(logoSizeDp), dp(logoSizeDp)))
         controlsView = panel
         overlayParams = overlayLayoutParams()
         windowManager.addView(panel, overlayParams)
+        refreshControls()
+    }
+
+    private fun startCaptureFromFloating() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = MainActivity.ACTION_START_FROM_FLOATING
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT,
+            )
+        }
+        startActivity(intent)
     }
 
     private fun handleBubbleTouch(view: View, event: MotionEvent): Boolean {
@@ -180,6 +235,7 @@ class FloatingControlsService : Service() {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 bubbleDragged = false
+                view.foreground = roundedOutline(pressed = true)
                 view.tag = floatArrayOf(event.rawX, event.rawY, params.x.toFloat(), params.y.toFloat())
                 return true
             }
@@ -199,9 +255,11 @@ class FloatingControlsService : Service() {
                 if (!bubbleDragged && event.action == MotionEvent.ACTION_UP) {
                     expanded = !expanded
                     actionButtons?.visibility = if (expanded) View.VISIBLE else View.GONE
+                    refreshControls()
                     view.contentDescription =
                         if (expanded) "Fechar controles de gravação" else "Abrir controles de gravação"
                 }
+                view.foreground = roundedOutline()
                 return true
             }
         }
@@ -254,11 +312,12 @@ class FloatingControlsService : Service() {
         val logoOpacityLabel = addSlider(
             panel,
             "Opacidade da bolha",
-            max = 80,
-            progress = ((logoOpacity - 0.2f) * 100).toInt().coerceIn(0, 80),
-            valueText = { "${((it + 20))}%" },
+            max = 100,
+            progress = (logoOpacity * 100).roundToInt().coerceIn(0, 100),
+            valueText = { "$it%" },
         ) { progress ->
-            logoOpacity = (progress + 20) / 100f
+            logoOpacity = progress / 100f
+            controlsView?.findViewWithTag<ImageView>("bubble_logo")?.alpha = logoOpacity
         }
         val brushOpacityLabel = addSlider(
             panel,
@@ -280,7 +339,6 @@ class FloatingControlsService : Service() {
             brushWidthDp = (progress + 2).toFloat()
             drawingView?.invalidate()
         }
-
         panel.addView(
             TextView(this).apply {
                 text = "Cor do pincel"
@@ -391,11 +449,16 @@ class FloatingControlsService : Service() {
         }
     }
 
-    private fun refreshPauseButton() {
-        val panel = controlsView as? LinearLayout ?: return
-        val button = panel.findViewWithTag<TextView>("pause") ?: return
-        button.text = if (paused) "▶" else "Ⅱ"
-        button.contentDescription = if (paused) "Retomar gravação" else "Pausar gravação"
+    private fun refreshControls() {
+        startButton?.visibility = if (recording) View.GONE else View.VISIBLE
+        pauseButton?.let {
+            it.visibility = if (recording) View.VISIBLE else View.GONE
+            it.text = if (paused) "▶" else "Ⅱ"
+            it.contentDescription = if (paused) "Retomar gravação" else "Pausar gravação"
+        }
+        drawButton?.visibility = if (recording) View.VISIBLE else View.GONE
+        stopButton?.visibility = if (recording) View.VISIBLE else View.GONE
+        actionButtons?.visibility = if (expanded) View.VISIBLE else View.GONE
     }
 
     private fun sendRecordingAction(action: String) {
@@ -409,15 +472,30 @@ class FloatingControlsService : Service() {
     ): TextView = TextView(this).apply {
         text = label
         contentDescription = description
-        textSize = 22f
+        textSize = (logoSizeDp * 0.44f).coerceIn(16f, 42f)
         gravity = Gravity.CENTER
         setTextColor(Color.WHITE)
         setTypeface(typeface, Typeface.BOLD)
-        background = roundedBackground(0xFFB81C2B.toInt(), dp(22).toFloat())
+        background = roundedBackground(
+            0xFFB81C2B.toInt(),
+            dp(logoSizeDp / 2).toFloat(),
+        )
+        setOnTouchListener { button, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    button.animate().scaleX(0.94f).scaleY(0.94f).setDuration(90).start()
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    button.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+                }
+            }
+            false
+        }
         setOnClickListener { onClick() }
     }
 
-    private fun buttonLayoutParams() = LinearLayout.LayoutParams(dp(46), dp(46)).apply {
+    private fun buttonLayoutParams() =
+        LinearLayout.LayoutParams(dp(logoSizeDp), dp(logoSizeDp)).apply {
         marginStart = dp(4)
         marginEnd = dp(4)
     }
@@ -468,7 +546,54 @@ class FloatingControlsService : Service() {
         cornerRadius = radius
     }
 
+    private fun roundedOutline(pressed: Boolean = false) = GradientDrawable().apply {
+        setColor(Color.TRANSPARENT)
+        setStroke(dp(if (pressed) 2 else 1), if (pressed) 0x99FFFFFF.toInt() else 0x44FFFFFF)
+        cornerRadius = dp(logoSizeDp / 2).toFloat()
+    }
+
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "Controles flutuantes",
+                    NotificationManager.IMPORTANCE_MIN,
+                ),
+            )
+        }
+    }
+
+    private fun buildNotification(): Notification {
+        val openIntent = PendingIntent.getActivity(
+            this,
+            2,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("B13 FALCON")
+            .setContentText("Controles flutuantes ativos")
+            .setSmallIcon(android.R.drawable.ic_menu_camera)
+            .setContentIntent(openIntent)
+            .setOngoing(true)
+            .setSilent(true)
+            .build()
+    }
+
+    private fun startForegroundCompat(notification: Notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
 
     override fun onDestroy() {
         controlsView?.let(windowManager::removeView)
@@ -477,6 +602,10 @@ class FloatingControlsService : Service() {
         controlsView = null
         settingsView = null
         actionButtons = null
+        startButton = null
+        pauseButton = null
+        drawButton = null
+        stopButton = null
         drawingView = null
         unregisterReceiver(recordingReceiver)
         super.onDestroy()

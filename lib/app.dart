@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:b13_falcon/core/constants/app_strings.dart';
 import 'package:b13_falcon/core/theme/app_theme.dart';
+import 'package:b13_falcon/core/theme/app_theme_data.dart';
 import 'package:b13_falcon/data/models/app_settings.dart';
 import 'package:b13_falcon/data/models/saved_recording.dart';
 import 'package:b13_falcon/features/home/home_page.dart';
@@ -34,6 +35,17 @@ class _B13FalconAppState extends State<B13FalconApp> {
   int _selectedIndex = 0;
   String _statusMessage = 'Sistema pronto para iniciar a gravação.';
   String? _recordingsError;
+  List<String> _supportedResolutions = const [
+    'native',
+    '360p',
+    '480p',
+    '540p',
+    '720p',
+    '1080p',
+    '1440p',
+  ];
+  List<int> _supportedFps = const [15, 24, 30, 45, 60, 90];
+  bool _hevcSupported = false;
 
   @override
   void initState() {
@@ -41,6 +53,35 @@ class _B13FalconAppState extends State<B13FalconApp> {
     _nativeRecorder.setRecordingStatusHandler(_onNativeRecordingStatus);
     unawaited(_loadSettings());
     unawaited(_loadRecordings());
+    unawaited(_loadVideoCapabilities());
+  }
+
+  Future<void> _loadVideoCapabilities() async {
+    try {
+      final capabilities = await _nativeRecorder.getVideoCapabilities();
+      if (!mounted) return;
+      setState(() {
+        _supportedResolutions =
+            (capabilities['resolutions'] as List<dynamic>?)
+                ?.whereType<String>()
+                .toList() ??
+            _supportedResolutions;
+        _supportedFps =
+            (capabilities['fps'] as List<dynamic>?)
+                ?.whereType<int>()
+                .toList() ??
+            _supportedFps;
+        _hevcSupported = capabilities['hevc'] as bool? ?? false;
+      });
+    } on PlatformException catch (error) {
+      if (mounted) {
+        _showMessage(
+          error.message ?? 'Não foi possível consultar os codecs do aparelho.',
+        );
+      }
+    } on MissingPluginException {
+      // Native codec capabilities are unavailable in widget previews.
+    }
   }
 
   void _onNativeRecordingStatus(Map<dynamic, dynamic> status) {
@@ -70,6 +111,20 @@ class _B13FalconAppState extends State<B13FalconApp> {
     setState(() => _settings = settings);
     try {
       await _nativeRecorder.setKeepScreenOn(settings.keepScreenOn);
+      if (settings.showFloatingControls) {
+        await _nativeRecorder.setFloatingControls(
+          enabled: true,
+          opacity: settings.floatingLogoOpacity,
+          sizeDp: settings.floatingLogoSizeDp,
+          resolution: settings.preferredResolution,
+          fps: settings.preferredFps,
+          bitrateKbps: settings.bitrateKbps,
+          audioMode: settings.audioMode,
+          codec: settings.codec,
+          orientation: settings.orientation,
+          bitratePreset: settings.bitratePreset,
+        );
+      }
     } on PlatformException catch (error) {
       if (mounted) {
         setState(
@@ -146,6 +201,10 @@ class _B13FalconAppState extends State<B13FalconApp> {
         audioMode: _settings.audioMode,
         showFloatingControls: _settings.showFloatingControls,
         floatingLogoOpacity: _settings.floatingLogoOpacity,
+        floatingLogoSizeDp: _settings.floatingLogoSizeDp,
+        codec: _settings.codec,
+        orientation: _settings.orientation,
+        bitratePreset: _settings.bitratePreset,
       );
       if (!mounted) return;
       if (result['success'] == true) {
@@ -215,6 +274,43 @@ class _B13FalconAppState extends State<B13FalconApp> {
   }
 
   Future<void> _saveSettings(AppSettings nextSettings) async {
+    if (nextSettings.showFloatingControls != _settings.showFloatingControls) {
+      if (nextSettings.showFloatingControls) {
+        final permitted = await _nativeRecorder.requestOverlayPermission();
+        if (!permitted) {
+          _showMessage(
+            'A permissão de sobreposição é necessária para a bolha.',
+          );
+          nextSettings = nextSettings.copyWith(showFloatingControls: false);
+        }
+      }
+      try {
+        final enabled = await _nativeRecorder.setFloatingControls(
+          enabled: nextSettings.showFloatingControls,
+          opacity: nextSettings.floatingLogoOpacity,
+          sizeDp: nextSettings.floatingLogoSizeDp,
+          resolution: nextSettings.preferredResolution,
+          fps: nextSettings.preferredFps,
+          bitrateKbps: nextSettings.bitrateKbps,
+          audioMode: nextSettings.audioMode,
+          codec: nextSettings.codec,
+          orientation: nextSettings.orientation,
+          bitratePreset: nextSettings.bitratePreset,
+        );
+        if (nextSettings.showFloatingControls && !enabled) {
+          nextSettings = nextSettings.copyWith(showFloatingControls: false);
+          _showMessage('Não foi possível iniciar o menu flutuante.');
+        }
+      } on PlatformException catch (error) {
+        _showMessage(
+          error.message ?? 'Não foi possível atualizar o flutuante.',
+        );
+        return;
+      } on MissingPluginException {
+        _showMessage('O menu flutuante está disponível no aplicativo Android.');
+        return;
+      }
+    }
     if (nextSettings.keepScreenOn != _settings.keepScreenOn) {
       try {
         await _nativeRecorder.setKeepScreenOn(nextSettings.keepScreenOn);
@@ -231,13 +327,20 @@ class _B13FalconAppState extends State<B13FalconApp> {
         return;
       }
     }
-    if (nextSettings.floatingLogoOpacity != _settings.floatingLogoOpacity &&
-        _isRecording &&
+    if ((nextSettings.floatingLogoOpacity != _settings.floatingLogoOpacity ||
+            nextSettings.floatingLogoSizeDp != _settings.floatingLogoSizeDp) &&
         nextSettings.showFloatingControls) {
       try {
-        await _nativeRecorder.setFloatingLogoOpacity(
-          nextSettings.floatingLogoOpacity,
-        );
+        if (nextSettings.floatingLogoOpacity != _settings.floatingLogoOpacity) {
+          await _nativeRecorder.setFloatingLogoOpacity(
+            nextSettings.floatingLogoOpacity,
+          );
+        }
+        if (nextSettings.floatingLogoSizeDp != _settings.floatingLogoSizeDp) {
+          await _nativeRecorder.setFloatingLogoSize(
+            nextSettings.floatingLogoSizeDp,
+          );
+        }
       } on PlatformException catch (error) {
         _showMessage(
           'Não foi possível atualizar a opacidade da bolha: '
@@ -247,6 +350,31 @@ class _B13FalconAppState extends State<B13FalconApp> {
         _showMessage(
           'A bolha flutuante está disponível no aplicativo Android.',
         );
+      }
+    }
+    if (nextSettings.showFloatingControls &&
+        nextSettings.showFloatingControls == _settings.showFloatingControls) {
+      try {
+        await _nativeRecorder.setFloatingControls(
+          enabled: true,
+          opacity: nextSettings.floatingLogoOpacity,
+          sizeDp: nextSettings.floatingLogoSizeDp,
+          resolution: nextSettings.preferredResolution,
+          fps: nextSettings.preferredFps,
+          bitrateKbps: nextSettings.bitrateKbps,
+          audioMode: nextSettings.audioMode,
+          codec: nextSettings.codec,
+          orientation: nextSettings.orientation,
+          bitratePreset: nextSettings.bitratePreset,
+        );
+      } on PlatformException catch (error) {
+        _showMessage(
+          error.message ?? 'Não foi possível atualizar o flutuante.',
+        );
+        return;
+      } on MissingPluginException {
+        _showMessage('O menu flutuante está disponível no aplicativo Android.');
+        return;
       }
     }
     await _settingsService.saveSettings(nextSettings);
@@ -259,11 +387,18 @@ class _B13FalconAppState extends State<B13FalconApp> {
     setState(() => _settings = const AppSettings());
     try {
       await _nativeRecorder.setKeepScreenOn(_settings.keepScreenOn);
-      if (_isRecording && _settings.showFloatingControls) {
-        await _nativeRecorder.setFloatingLogoOpacity(
-          _settings.floatingLogoOpacity,
-        );
-      }
+      await _nativeRecorder.setFloatingControls(
+        enabled: _settings.showFloatingControls,
+        opacity: _settings.floatingLogoOpacity,
+        sizeDp: _settings.floatingLogoSizeDp,
+        resolution: _settings.preferredResolution,
+        fps: _settings.preferredFps,
+        bitrateKbps: _settings.bitrateKbps,
+        audioMode: _settings.audioMode,
+        codec: _settings.codec,
+        orientation: _settings.orientation,
+        bitratePreset: _settings.bitratePreset,
+      );
     } on PlatformException catch (error) {
       _showMessage(
         'Configurações restauradas, mas não foi possível aplicar a tela ligada: '
@@ -343,6 +478,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
 
   @override
   Widget build(BuildContext context) {
+    final themeData = AppThemeData.fromId(_settings.themeAccent);
     final pages = [
       HomePage(
         settings: _settings,
@@ -370,6 +506,9 @@ class _B13FalconAppState extends State<B13FalconApp> {
         onChanged: _saveSettings,
         onReset: _resetSettings,
         onBack: _goHome,
+        supportedResolutions: _supportedResolutions,
+        supportedFps: _supportedFps,
+        hevcSupported: _hevcSupported,
       ),
     ];
 
@@ -378,8 +517,14 @@ class _B13FalconAppState extends State<B13FalconApp> {
       scaffoldMessengerKey: _messengerKey,
       title: AppStrings.appName,
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme(accentColor: _settings.accentColor),
-      darkTheme: AppTheme.darkTheme(accentColor: _settings.accentColor),
+      theme: AppTheme.lightTheme(
+        accentColor: _settings.accentColor,
+        themeData: themeData,
+      ),
+      darkTheme: AppTheme.darkTheme(
+        accentColor: _settings.accentColor,
+        themeData: themeData,
+      ),
       themeMode: _settings.themeMode,
       home: Builder(
         builder: (context) => PopScope(
@@ -388,25 +533,33 @@ class _B13FalconAppState extends State<B13FalconApp> {
             if (!didPop) _goHome();
           },
           child: Scaffold(
-            body: Stack(
-              fit: StackFit.expand,
-              children: List.generate(pages.length, (index) {
-                final selected = _selectedIndex == index;
-                return IgnorePointer(
-                  ignoring: !selected,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 280),
-                    curve: Curves.easeInOut,
-                    opacity: selected ? 1 : 0,
-                    child: AnimatedSlide(
-                      duration: const Duration(milliseconds: 280),
-                      curve: Curves.easeOutCubic,
-                      offset: selected ? Offset.zero : const Offset(0.035, 0),
-                      child: pages[index],
+            body: AnimatedThemeBackground(
+              themeData: themeData,
+              isDark: _settings.isDarkMode,
+              child: Stack(
+                fit: StackFit.expand,
+                children: List.generate(pages.length, (index) {
+                  final selected = _selectedIndex == index;
+                  return IgnorePointer(
+                    ignoring: !selected,
+                    child: AnimatedOpacity(
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 280),
+                      curve: Curves.easeInOut,
+                      opacity: selected ? 1 : 0,
+                      child: AnimatedSlide(
+                        duration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        offset: selected ? Offset.zero : const Offset(0.035, 0),
+                        child: pages[index],
+                      ),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }),
+              ),
             ),
             floatingActionButton: _settings.showFloatingControls
                 ? _buildFloatingControls()
