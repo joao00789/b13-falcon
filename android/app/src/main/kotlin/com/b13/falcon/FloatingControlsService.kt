@@ -378,12 +378,8 @@ class FloatingControlsService : Service() {
                     dp(18).toFloat(),
                 )
                 setOnClickListener {
+                    drawingView?.updateSelectedBrushColor(color)
                     brushColor = color
-                    val hsv = FloatArray(3)
-                    Color.colorToHSV(color, hsv)
-                    selectedHue = hsv[0]
-                    selectedSaturation = hsv[1]
-                    selectedBrightness = hsv[2]
                     drawingView?.invalidate()
                     populateBrushColors(row)
                 }
@@ -532,6 +528,17 @@ class FloatingControlsService : Service() {
         init {
             contentDescription =
                 "Ferramentas: cor, pincel livre, caixa, círculo, desfazer e limpar."
+            updateSelectedBrushColor(brushColor)
+        }
+
+        fun updateSelectedBrushColor(color: Int) {
+            brushColor = color
+            val hsv = FloatArray(3)
+            Color.colorToHSV(color, hsv)
+            selectedHue = hsv[0]
+            selectedSaturation = hsv[1]
+            selectedBrightness = hsv[2]
+            invalidate()
         }
 
         override fun onDraw(canvas: Canvas) {
