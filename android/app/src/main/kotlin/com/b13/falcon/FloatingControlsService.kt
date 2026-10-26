@@ -20,7 +20,9 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.SeekBar
 import android.widget.TextView
+import kotlin.math.roundToInt
 
 class FloatingControlsService : Service() {
     companion object {
@@ -30,6 +32,7 @@ class FloatingControlsService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var controlsView: View? = null
+    private var settingsView: View? = null
     private var drawingView: DrawingOverlayView? = null
     private var actionButtons: LinearLayout? = null
     private var overlayParams: WindowManager.LayoutParams? = null
@@ -37,7 +40,19 @@ class FloatingControlsService : Service() {
     private var bubbleDragged = false
     private var paused = false
     private var logoOpacity = 0.85f
+    private var brushColor = Color.YELLOW
+    private var brushOpacity = 1f
+    private var brushWidthDp = 5f
     private data class Stroke(val path: Path, val paint: Paint)
+    private val brushColors = listOf(
+        Color.YELLOW,
+        Color.WHITE,
+        Color.RED,
+        Color.BLUE,
+        Color.GREEN,
+        Color.CYAN,
+        Color.MAGENTA,
+    )
 
     private val recordingReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -127,6 +142,12 @@ class FloatingControlsService : Service() {
             buttonLayoutParams(),
         )
         buttons.addView(
+            createButton("⚙", "Configurar pincel e opacidade") {
+                showSettingsPanel()
+            },
+            buttonLayoutParams(),
+        )
+        buttons.addView(
             createButton("×", "Parar gravação") {
                 sendRecordingAction(RecordingService.ACTION_STOP)
             },
@@ -176,6 +197,10 @@ class FloatingControlsService : Service() {
 
     private fun showDrawingLayer() {
         if (drawingView != null) return
+        settingsView?.let {
+            windowManager.removeView(it)
+            settingsView = null
+        }
         controlsView?.let {
             windowManager.removeView(it)
             controlsView = null
@@ -188,6 +213,168 @@ class FloatingControlsService : Service() {
         }
         drawingView = view
         windowManager.addView(view, drawingLayoutParams())
+    }
+
+    private fun showSettingsPanel() {
+        settingsView?.let(windowManager::removeView)
+        settingsView = null
+        controlsView?.let {
+            windowManager.removeView(it)
+            controlsView = null
+            actionButtons = null
+        }
+
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(14), dp(18), dp(14))
+            background = roundedBackground(0xF020252D.toInt(), dp(20).toFloat())
+        }
+        panel.addView(
+            TextView(this).apply {
+                text = "Configurações flutuantes"
+                textSize = 18f
+                setTextColor(Color.WHITE)
+                setTypeface(typeface, Typeface.BOLD)
+            },
+        )
+
+        val logoOpacityLabel = addSlider(
+            panel,
+            "Opacidade da bolha",
+            max = 80,
+            progress = ((logoOpacity - 0.2f) * 100).toInt().coerceIn(0, 80),
+            valueText = { "${((it + 20))}%" },
+        ) { progress ->
+            logoOpacity = (progress + 20) / 100f
+        }
+        val brushOpacityLabel = addSlider(
+            panel,
+            "Opacidade do pincel",
+            max = 100,
+            progress = (brushOpacity * 100).toInt(),
+            valueText = { "$it%" },
+        ) { progress ->
+            brushOpacity = progress / 100f
+            drawingView?.invalidate()
+        }
+        val brushWidthLabel = addSlider(
+            panel,
+            "Espessura do pincel",
+            max = 18,
+            progress = (brushWidthDp - 2f).toInt().coerceIn(0, 18),
+            valueText = { "${it + 2} dp" },
+        ) { progress ->
+            brushWidthDp = (progress + 2).toFloat()
+            drawingView?.invalidate()
+        }
+
+        panel.addView(
+            TextView(this).apply {
+                text = "Cor do pincel"
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                setPadding(0, dp(8), 0, dp(4))
+            },
+        )
+        val colorRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        populateBrushColors(colorRow)
+        panel.addView(colorRow)
+
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(10), 0, 0)
+        }
+        actions.addView(
+            createButton("Voltar", "Voltar aos controles flutuantes") {
+                settingsView?.let(windowManager::removeView)
+                settingsView = null
+                showControls()
+            },
+            LinearLayout.LayoutParams(dp(92), dp(46)),
+        )
+        actions.addView(
+            createButton("✎", "Ativar pincel com estas configurações") {
+                showDrawingLayer()
+            },
+            buttonLayoutParams(),
+        )
+        panel.addView(actions)
+
+        logoOpacityLabel.text = "Opacidade da bolha: ${((logoOpacity * 100).roundToInt())}%"
+        brushOpacityLabel.text = "Opacidade do pincel: ${((brushOpacity * 100).roundToInt())}%"
+        brushWidthLabel.text = "Espessura do pincel: ${brushWidthDp.roundToInt()} dp"
+        settingsView = panel
+        windowManager.addView(panel, settingsLayoutParams())
+    }
+
+    private fun addSlider(
+        parent: LinearLayout,
+        title: String,
+        max: Int,
+        progress: Int,
+        valueText: (Int) -> String,
+        onChanged: (Int) -> Unit,
+    ): TextView {
+        val label = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            setPadding(0, dp(8), 0, 0)
+        }
+        val seekBar = SeekBar(this).apply {
+            this.max = max
+            this.progress = progress.coerceIn(0, max)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, value: Int, fromUser: Boolean) {
+                    label.text = "$title: ${valueText(value)}"
+                    onChanged(value)
+                    controlsView?.findViewWithTag<ImageView>("bubble_logo")?.alpha = logoOpacity
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        label.text = "$title: ${valueText(progress)}"
+        parent.addView(label)
+        parent.addView(
+            seekBar,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        return label
+    }
+
+    private fun populateBrushColors(row: LinearLayout) {
+        row.removeAllViews()
+        brushColors.forEach { color ->
+            val swatch = TextView(this).apply {
+                text = "●"
+                textSize = 25f
+                gravity = Gravity.CENTER
+                setTextColor(color)
+                contentDescription = "Selecionar cor do pincel"
+                background = roundedBackground(
+                    if (brushColor == color) 0xFF596273.toInt() else Color.TRANSPARENT,
+                    dp(18).toFloat(),
+                )
+                setOnClickListener {
+                    brushColor = color
+                    drawingView?.invalidate()
+                    populateBrushColors(row)
+                }
+            }
+            row.addView(
+                swatch,
+                LinearLayout.LayoutParams(0, dp(42), 1f),
+            )
+        }
     }
 
     private fun refreshPauseButton() {
@@ -243,6 +430,18 @@ class FloatingControlsService : Service() {
         gravity = Gravity.TOP or Gravity.START
     }
 
+    private fun settingsLayoutParams() = WindowManager.LayoutParams(
+        minOf(resources.displayMetrics.widthPixels - dp(32), dp(420)),
+        WindowManager.LayoutParams.WRAP_CONTENT,
+        overlayWindowType(),
+        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+        PixelFormat.TRANSLUCENT,
+    ).apply {
+        gravity = Gravity.CENTER
+        x = dp(16)
+        y = 0
+    }
+
     private fun overlayWindowType() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
     } else {
@@ -259,8 +458,10 @@ class FloatingControlsService : Service() {
 
     override fun onDestroy() {
         controlsView?.let(windowManager::removeView)
+        settingsView?.let(windowManager::removeView)
         drawingView?.let(windowManager::removeView)
         controlsView = null
+        settingsView = null
         actionButtons = null
         drawingView = null
         unregisterReceiver(recordingReceiver)
@@ -347,9 +548,10 @@ class FloatingControlsService : Service() {
         }
 
         private fun brushPaint() = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.YELLOW
+            color = brushColor
+            alpha = (brushOpacity * 255).roundToInt().coerceIn(0, 255)
             style = Paint.Style.STROKE
-            strokeWidth = dp(5).toFloat()
+            strokeWidth = dp(brushWidthDp.roundToInt()).toFloat()
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }

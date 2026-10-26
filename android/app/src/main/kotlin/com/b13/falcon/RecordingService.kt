@@ -103,7 +103,7 @@ class RecordingService : Service() {
     private val pauseIntervals = mutableListOf<PauseInterval>()
     private var videoClockOffsetUs: Long? = null
     private var videoStartPresentationTimeUs: Long? = null
-    private val microphoneFrames = ArrayBlockingQueue<ShortArray>(4)
+    private val microphoneFrames = ArrayBlockingQueue<ShortArray>(16)
     private val playbackFrames = ArrayBlockingQueue<ShortArray>(4)
 
     private val projectionCallback = object : MediaProjection.Callback() {
@@ -312,17 +312,17 @@ class RecordingService : Service() {
                 AudioFormat.ENCODING_PCM_16BIT,
             )
             if (bufferSize <= 0) throw IOException("Não foi possível preparar o microfone.")
+            val frameBufferSize = AUDIO_FRAME_SAMPLES * Short.SIZE_BYTES * 8
             microphoneRecorder = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 AUDIO_SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
-                maxOf(bufferSize, AUDIO_FRAME_SAMPLES * 2),
+                maxOf(bufferSize, frameBufferSize),
             ).also {
                 if (it.state != AudioRecord.STATE_INITIALIZED) {
                     throw IOException("O microfone não pôde ser inicializado.")
                 }
-                it.startRecording()
             }
         }
 
@@ -365,10 +365,36 @@ class RecordingService : Service() {
     private fun startAudioCaptureThreads() {
         microphoneRecorder?.let { recorder ->
             microphoneReaderThread = Thread({
-                val frame = ShortArray(AUDIO_FRAME_SAMPLES)
-                while (recording) {
-                    val read = recorder.read(frame, 0, frame.size)
-                    if (read > 0) offerLatest(microphoneFrames, frame.copyOf(read))
+                try {
+                    while (recording) {
+                        if (paused) {
+                            microphoneFrames.clear()
+                            if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                                recorder.stop()
+                            }
+                            TimeUnit.MILLISECONDS.sleep(10)
+                            continue
+                        }
+                        if (recorder.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+                            recorder.startRecording()
+                        }
+                        val frame = readMicrophoneFrame(recorder) ?: continue
+                        if (!recording || paused) continue
+                        while (recording && !paused &&
+                            !microphoneFrames.offer(frame, 100, TimeUnit.MILLISECONDS)
+                        ) {
+                            // Apply backpressure rather than discarding captured microphone audio.
+                        }
+                    }
+                } catch (error: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                } catch (error: Exception) {
+                    if (recording) {
+                        sendStatus("error", error.message ?: "Falha ao capturar o áudio do microfone.")
+                        android.os.Handler(mainLooper).post {
+                            if (recording) stopRecording()
+                        }
+                    }
                 }
             }, "B13FalconMicReader").also { it.start() }
         }
@@ -411,6 +437,25 @@ class RecordingService : Service() {
         audioMixerThread = Thread(::mixAudioFrames, "B13FalconAudioMixer").also { it.start() }
     }
 
+    private fun readMicrophoneFrame(recorder: AudioRecord): ShortArray? {
+        val frame = ShortArray(AUDIO_FRAME_SAMPLES)
+        var samplesRead = 0
+        while (samplesRead < frame.size && recording && !paused) {
+            val read = recorder.read(
+                frame,
+                samplesRead,
+                frame.size - samplesRead,
+                AudioRecord.READ_BLOCKING,
+            )
+            if (read < 0) {
+                if (!recording || paused) return null
+                throw IOException("Falha ao ler o microfone (AudioRecord: $read).")
+            }
+            samplesRead += read
+        }
+        return frame.takeIf { samplesRead == frame.size }
+    }
+
     private fun readPlaybackFrame(recorder: AudioRecord): ShortArray? {
         val frame = ShortArray(AUDIO_FRAME_SAMPLES * PLAYBACK_CHANNELS)
         var samplesRead = 0
@@ -430,13 +475,6 @@ class RecordingService : Service() {
         return frame.takeIf { samplesRead == frame.size }
     }
 
-    private fun offerLatest(queue: ArrayBlockingQueue<ShortArray>, frame: ShortArray) {
-        if (!queue.offer(frame)) {
-            queue.poll()
-            queue.offer(frame)
-        }
-    }
-
     private fun mixAudioFrames() {
         val audioCodec = audioEncoder ?: return
         if (playbackRequired && !microphoneRequired) {
@@ -451,10 +489,11 @@ class RecordingService : Service() {
                 TimeUnit.MILLISECONDS.sleep(10)
                 continue
             }
-            val microphone = if (microphoneRequired && !paused) {
-                microphoneFrames.poll(10, TimeUnit.MILLISECONDS)
-            } else {
-                null
+            val microphone = if (microphoneRequired) {
+                microphoneFrames.poll(100, TimeUnit.MILLISECONDS)
+            } else null
+            if (microphoneRequired && microphone == null) {
+                continue
             }
             val playback = if (playbackRequired && !paused) {
                 playbackFrames.poll(10, TimeUnit.MILLISECONDS)
@@ -470,9 +509,9 @@ class RecordingService : Service() {
                 val mic = microphone?.getOrNull(index)?.toInt() ?: 0
                 val game = playback?.getOrNull(index)?.toInt() ?: 0
                 val combined = when {
-                    microphoneRequired && playbackRequired -> (mic + game) / 2
-                    microphoneRequired -> mic
-                    playbackRequired -> game
+                    microphone != null && playback != null -> (mic + game) / 2
+                    microphone != null -> mic
+                    playback != null -> game
                     else -> 0
                 }
                 inputBuffer.putShort(
