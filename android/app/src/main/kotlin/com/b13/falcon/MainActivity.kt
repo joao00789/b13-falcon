@@ -25,6 +25,7 @@ class MainActivity : FlutterActivity() {
         const val REQUEST_OVERLAY_PERMISSION = 1003
         const val REQUEST_AUDIO_PERMISSION = 1004
         const val REQUEST_NOTIFICATION_PERMISSION = 1005
+        const val REQUEST_MEDIA_PROJECTION = 1001
     }
 
     private lateinit var channel: MethodChannel

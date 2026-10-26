@@ -3,7 +3,7 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual: `1.2.2+13`; branch `main`; a versão `v1.2.1` é a última release publicada.
+- Versão atual: `1.2.3+14`; branch `main`; a versão `v1.2.1` é a última release publicada.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
 - `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos e configuração do overlay.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
@@ -94,6 +94,13 @@
 - O workflow exige os secrets `B13_RELEASE_KEYSTORE_BASE64`, `B13_RELEASE_STORE_PASSWORD`, `B13_RELEASE_KEY_ALIAS` e `B13_RELEASE_KEY_PASSWORD`, gera APKs release assinados para cada ABI e anexa os APKs à pré-release criada por tag.
 - Removido o passo KVM sem efeito.
 - Versão elevada para `1.2.2+13`; tag planejada: `v1.2.2`.
+- A tag `v1.2.2` foi enviada, mas o APK não foi publicado: a compilação Kotlin falhou por falta da constante `REQUEST_MEDIA_PROJECTION` em `MainActivity`.
+
+### 2026-10-26 — Corrige compilação e prepara nova tag de release
+
+- Definido o código de requisição MediaProjection ausente em `MainActivity`; essa falha impedia o workflow de compilar qualquer APK da tag `v1.2.2`.
+- Elevada a versão para `1.2.3+14`; nova tag planejada: `v1.2.3`, sem mover nem substituir a tag anterior.
+- `dart format`, `flutter analyze` e `flutter test` passaram; a compilação release local não foi possível porque este ambiente não tem Android SDK.
 
 ## Decisões e limitações conhecidas
 
@@ -109,7 +116,7 @@
 
 - Validar em aparelho o início pelo overlay sem trazer o app à frente e a orientação em jogo horizontal.
 - Verificar timestamps, mixagem/ganhos de áudio, limite de amostras pendentes e limpeza de saída em falha.
-- Validar uma atualização de APK assinado sobre uma instalação anterior no aparelho.
+- Confirmar que o workflow da tag `v1.2.3` publica os APKs assinados; validar uma atualização sobre instalação anterior no aparelho.
 - Validar POST_NOTIFICATIONS no Android 13+, tamanho/qualidade e compatibilidade de codecs em aparelhos reais.
 - Concluir limpeza de permissões antigas e componentes não usados, após confirmar a consulta da biblioteca em cada versão Android suportada.
 
