@@ -53,8 +53,8 @@ Atualize também o campo `version` em `pubspec.yaml` antes de cada release (o n�
 após `+` é o `versionCode` Android, que deve sempre aumentar):
 
 ```bash
-git tag v1.1.1
-git push origin v1.1.1
+git tag v1.1.2
+git push origin v1.1.2
 ```
 
 Cada tag `v*` aciona o GitHub Actions, compila o APK e cria um pré-lançamento com

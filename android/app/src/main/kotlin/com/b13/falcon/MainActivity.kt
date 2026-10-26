@@ -175,42 +175,42 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun handleStopRecording(result: MethodChannel.Result) {
+        if (!isRecording) {
+            result.success(mapOf("success" to true, "message" to "Nenhuma gravação está ativa."))
+            return
+        }
         val intent = Intent(this, RecordingService::class.java).apply {
             action = RecordingService.ACTION_STOP
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
+        startService(intent)
         isRecording = false
         isPaused = false
         floatingControlsEnabled = false
-        result.success(mapOf("success" to true, "message" to "Gravação finalizada."))
+        result.success(mapOf("success" to true, "message" to "Finalizando a gravação."))
     }
 
     private fun handlePauseRecording(result: MethodChannel.Result) {
+        if (!isRecording || isPaused) {
+            result.success(mapOf("success" to false, "message" to "Não há gravação ativa para pausar."))
+            return
+        }
         val intent = Intent(this, RecordingService::class.java).apply {
             action = RecordingService.ACTION_PAUSE
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
+        startService(intent)
         isPaused = true
         result.success(mapOf("success" to true, "message" to "Gravação pausada."))
     }
 
     private fun handleResumeRecording(result: MethodChannel.Result) {
+        if (!isRecording || !isPaused) {
+            result.success(mapOf("success" to false, "message" to "Não há gravação pausada para retomar."))
+            return
+        }
         val intent = Intent(this, RecordingService::class.java).apply {
             action = RecordingService.ACTION_RESUME
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
+        startService(intent)
         isPaused = false
         result.success(mapOf("success" to true, "message" to "Gravação retomada."))
     }

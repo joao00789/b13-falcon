@@ -99,7 +99,9 @@ class RecordingService : Service() {
     private var audioChannelCount = 1
     private var videoTrack = -1
     private var audioTrack = -1
+    @Volatile private var stopping = false
     private val muxerLock = Any()
+    private val stopLock = Any()
     private val pendingSamples = mutableListOf<EncodedSample>()
     private val pauseIntervals = mutableListOf<PauseInterval>()
     private var videoClockOffsetUs: Long? = null
@@ -123,17 +125,21 @@ class RecordingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                val audioMode = intent.getStringExtra("audioMode")
-                val needsMicrophone =
-                    audioMode == "both" || audioMode == "microphone" || audioMode == "Microfone"
-                startForegroundCompat(buildNotification("Preparando gravação"), needsMicrophone)
-                try {
-                    startRecording(intent)
-                } catch (error: Exception) {
-                    stopRecording()
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    sendStatus("error", error.message ?: "Não foi possível iniciar a captura.")
+                if (stopping) {
+                    sendStatus("error", "A gravação anterior ainda está sendo finalizada.")
+                } else {
+                    val audioMode = intent.getStringExtra("audioMode")
+                    val needsMicrophone =
+                        audioMode == "both" || audioMode == "microphone" || audioMode == "Microfone"
+                    startForegroundCompat(buildNotification("Preparando gravação"), needsMicrophone)
+                    try {
+                        startRecording(intent)
+                    } catch (error: Exception) {
+                        stopRecording(
+                            state = "error",
+                            message = error.message ?: "Não foi possível iniciar a captura.",
+                        )
+                    }
                 }
             }
             ACTION_STOP -> {
@@ -150,6 +156,7 @@ class RecordingService : Service() {
                         .notify(NOTIFICATION_ID, buildNotification("Gravação pausada"))
                     sendStatus("paused", "Gravação pausada.")
                 }
+                if (!recording && !stopping) stopSelf()
             }
             ACTION_RESUME -> {
                 if (recording && paused) {
@@ -162,6 +169,7 @@ class RecordingService : Service() {
                         .notify(NOTIFICATION_ID, buildNotification("B13 FALCON gravando..."))
                     sendStatus("recording", "Gravação retomada.")
                 }
+                if (!recording && !stopping) stopSelf()
             }
         }
         return START_NOT_STICKY
@@ -180,6 +188,9 @@ class RecordingService : Service() {
     }
 
     private fun startRecording(intent: Intent) {
+        if (stopping) {
+            throw IOException("A gravação anterior ainda está sendo finalizada.")
+        }
         if (recording) return
         val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
         val permissionData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -823,49 +834,77 @@ class RecordingService : Service() {
         }
     }
 
-    private fun stopRecording() {
+    private fun stopRecording(
+        state: String = "stopped",
+        message: String = "Gravação finalizada.",
+    ) {
         val wasRecording = recording
-        if (!wasRecording && encoder == null && audioEncoder == null && projection == null) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return
+        synchronized(stopLock) {
+            if (stopping) return
+            stopping = true
+            recording = false
         }
-        recording = false
-        runCatching { virtualDisplay?.release() }
-        virtualDisplay = null
-        runCatching { microphoneRecorder?.stop() }
-        runCatching { playbackRecorder?.stop() }
-        microphoneReaderThread?.join(1000)
-        playbackReaderThread?.join(1000)
-        audioMixerThread?.join(1000)
-        runCatching { encoder?.signalEndOfInputStream() }
-        if (audioMixerThread == null) runCatching { audioEncoder?.signalEndOfInputStream() }
-        projection?.unregisterCallback(projectionCallback)
-        runCatching { projection?.stop() }
-        projection = null
-        drainThread?.join(5000)
-        drainThread = null
-        audioDrainThread?.join(5000)
-        audioDrainThread = null
-        encoder?.runCatching { stop() }
-        encoder?.release()
-        encoder = null
-        audioEncoder?.runCatching { stop() }
-        audioEncoder?.release()
-        audioEncoder = null
-        microphoneRecorder?.release()
-        microphoneRecorder = null
-        playbackRecorder?.release()
-        playbackRecorder = null
-        encoderInputSurface?.release()
-        encoderInputSurface = null
-        microphoneReaderThread = null
-        playbackReaderThread = null
-        audioMixerThread = null
-        finishOutput()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
-        if (wasRecording) sendStatus("stopped", "Gravação finalizada.")
+        var finalState = state
+        var finalMessage = message
+
+        Thread({
+            try {
+                runCatching { virtualDisplay?.release() }
+                virtualDisplay = null
+                runCatching { microphoneRecorder?.stop() }
+                runCatching { playbackRecorder?.stop() }
+                joinThread(microphoneReaderThread, 1000)
+                joinThread(playbackReaderThread, 1000)
+                joinThread(audioMixerThread, 1000)
+                runCatching { encoder?.signalEndOfInputStream() }
+                if (audioMixerThread == null) {
+                    runCatching { audioEncoder?.signalEndOfInputStream() }
+                }
+                projection?.unregisterCallback(projectionCallback)
+                runCatching { projection?.stop() }
+                projection = null
+                joinThread(drainThread, 5000)
+                drainThread = null
+                joinThread(audioDrainThread, 5000)
+                audioDrainThread = null
+                runCatching { encoder?.stop() }
+                runCatching { encoder?.release() }
+                encoder = null
+                runCatching { audioEncoder?.stop() }
+                runCatching { audioEncoder?.release() }
+                audioEncoder = null
+                runCatching { microphoneRecorder?.release() }
+                microphoneRecorder = null
+                runCatching { playbackRecorder?.release() }
+                playbackRecorder = null
+                runCatching { encoderInputSurface?.release() }
+                encoderInputSurface = null
+                microphoneReaderThread = null
+                playbackReaderThread = null
+                audioMixerThread = null
+                finishOutput()
+            } catch (error: Exception) {
+                finalState = "error"
+                finalMessage = error.message ?: "Não foi possível finalizar a gravação."
+            } finally {
+                android.os.Handler(mainLooper).post {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    if (wasRecording || finalState == "error") {
+                        sendStatus(finalState, finalMessage)
+                    }
+                    stopping = false
+                    stopSelf()
+                }
+            }
+        }, "B13FalconRecordingStop").start()
+    }
+
+    private fun joinThread(thread: Thread?, timeoutMs: Long) {
+        try {
+            thread?.join(timeoutMs)
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
     }
 
     @Synchronized
