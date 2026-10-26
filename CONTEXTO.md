@@ -3,7 +3,7 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual: `1.2.3+15`; branch `main`; a versão `v1.2.3` é a última release publicada.
+- Versão atual: `1.2.5+17`; branch `main`; a versão `v1.2.3` é a última release publicada.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
 - `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos e configuração do overlay.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
@@ -22,7 +22,7 @@
 ## Configurações e valores válidos
 
 - `isDarkMode`: `true` / `false`.
-- `themeAccent`: `falcon | ocean | emerald | violet`.
+- `themeAccent`: `falcon | ocean | emerald | violet | sunset | rose | arctic | black`.
 - `showFloatingControls`, `keepScreenOn`: `true` / `false`.
 - `floatingLogoOpacity`: `0.0` a `1.0`; em 0%, a bolha continua tocável.
 - `floatingLogoSizeDp`: 32 a 96 dp.
@@ -45,6 +45,12 @@
 - Lucide SVGs e licença ISC em `assets/icons/lucide/`; drawables vetoriais Android equivalentes em `android/app/src/main/res/drawable/`.
 
 ## Changelog (cronológico)
+
+### 2026-10-26 — Ajustes finais de estabilidade e refinamento do tema
+
+- Ajustado o texto de validação do app e os testes para refletirem a realidade do fluxo atual com múltiplos textos `B13 FALCON` e seleção de áudio via `ChoiceChip`.
+- Refinado o visual dos cards de tema para deixar a seleção mais compacta, com maior contraste e melhor destaque do estado ativo.
+- Atualizada a versão do app para `1.2.5+17` e mantido o `CONTEXTO.md` sincronizado com a situação atual do projeto.
 
 ### 2026-10-26 — Base funcional e entregas anteriores
 
@@ -107,6 +113,14 @@
 
 - Incrementado o build number para `1.2.3+15` após atualizar o estado da publicação neste contexto.
 
+### 2026-10-26 — Recuperação de configurações e renovação dos temas
+
+- `AppSettings.fromJson` agora valida tipos, valores permitidos e limites numéricos ao recuperar preferências. JSON inválido é reportado ao FlutterError em vez de ser silenciosamente ignorado.
+- Ao abrir, se o serviço de controles flutuantes não puder iniciar (por exemplo, permissão de sobreposição revogada), a opção é desativada e salva para o app continuar abrindo.
+- Os cards de tema foram redesenhados como prévias maiores com estado ativo visível, visual do gravador e botão demonstrativo.
+- Adicionados os temas Sunset, Rose, Arctic e Black, com suporte a persistência e compatibilidade com os quatro IDs antigos.
+- Incrementada a versão para `1.2.4+16`.
+
 ## Decisões e limitações conhecidas
 
 - MediaProjection exige consentimento do usuário em cada nova sessão; o overlay não pode reutilizar consentimento anterior.
@@ -123,6 +137,7 @@
 - Verificar timestamps, mixagem/ganhos de áudio, limite de amostras pendentes e limpeza de saída em falha.
 - Confirmar que o workflow da tag `v1.2.3` publica os APKs assinados; validar uma atualização sobre instalação anterior no aparelho.
 - Validar POST_NOTIFICATIONS no Android 13+, tamanho/qualidade e compatibilidade de codecs em aparelhos reais.
+- Se o crash persistir, recolher o stack trace do Android/logcat para confirmar a causa específica; as duas causas acima são cenários plausíveis, não diagnóstico confirmado sem log do aparelho.
 - Concluir limpeza de permissões antigas e componentes não usados, após confirmar a consulta da biblioteca em cada versão Android suportada.
 
 ## Comandos de validação

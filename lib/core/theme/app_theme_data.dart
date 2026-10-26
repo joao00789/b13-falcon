@@ -78,6 +78,58 @@ class AppThemeData {
       ),
       particleStyle: ThemeParticleStyle.stars,
     ),
+    AppThemeData(
+      id: 'sunset',
+      name: 'Sunset',
+      accent: Color(0xFFE45B37),
+      secondary: Color(0xFFFFC46B),
+      background: Color(0xFF211017),
+      surface: Color(0xFF351B25),
+      particleColors: [Color(0xFFFFC46B), Color(0xFFFF744D), Color(0xFFDB4771)],
+      buttonGradient: LinearGradient(
+        colors: [Color(0xFFFF8650), Color(0xFFB63D4E)],
+      ),
+      particleStyle: ThemeParticleStyle.embers,
+    ),
+    AppThemeData(
+      id: 'rose',
+      name: 'Rose',
+      accent: Color(0xFFD64078),
+      secondary: Color(0xFFFFA8C7),
+      background: Color(0xFF200D18),
+      surface: Color(0xFF341626),
+      particleColors: [Color(0xFFFFA8C7), Color(0xFFE85C9B), Color(0xFFB83270)],
+      buttonGradient: LinearGradient(
+        colors: [Color(0xFFEF6FA7), Color(0xFFB92F73)],
+      ),
+      particleStyle: ThemeParticleStyle.fireflies,
+    ),
+    AppThemeData(
+      id: 'arctic',
+      name: 'Arctic',
+      accent: Color(0xFF4E9CC7),
+      secondary: Color(0xFFB6EEFF),
+      background: Color(0xFF0A1720),
+      surface: Color(0xFF142A36),
+      particleColors: [Color(0xFFB6EEFF), Color(0xFF68CBE8), Color(0xFF729CDA)],
+      buttonGradient: LinearGradient(
+        colors: [Color(0xFF69C7E4), Color(0xFF397EBD)],
+      ),
+      particleStyle: ThemeParticleStyle.bubbles,
+    ),
+    AppThemeData(
+      id: 'black',
+      name: 'Black',
+      accent: Color(0xFFC9A85A),
+      secondary: Color(0xFFF3D98B),
+      background: Color(0xFF08090B),
+      surface: Color(0xFF15171A),
+      particleColors: [Color(0xFFF3D98B), Color(0xFFB6B8BC), Color(0xFF8A7240)],
+      buttonGradient: LinearGradient(
+        colors: [Color(0xFF4B4128), Color(0xFF171717)],
+      ),
+      particleStyle: ThemeParticleStyle.stars,
+    ),
   ];
 
   static AppThemeData fromId(String id) =>
@@ -299,112 +351,249 @@ class ThemePreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reduceAnimations = MediaQuery.of(context).disableAnimations;
-    return AnimatedScale(
-      scale: selected ? 1 : 0.96,
-      duration: reduceAnimations
-          ? Duration.zero
-          : const Duration(milliseconds: 220),
-      child: AnimatedContainer(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Tema ${themeData.name}${selected ? ", selecionado" : ""}',
+      child: AnimatedScale(
+        scale: selected ? 1 : 0.97,
         duration: reduceAnimations
             ? Duration.zero
             : const Duration(milliseconds: 220),
-        width: 228,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? themeData.secondary : Colors.white24,
-            width: selected ? 2.5 : 1,
+        child: AnimatedContainer(
+          duration: reduceAnimations
+              ? Duration.zero
+              : const Duration(milliseconds: 220),
+          width: 168,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected ? themeData.secondary : Colors.white24,
+              width: selected ? 2.2 : 1,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: themeData.accent.withValues(alpha: 0.42),
+                      blurRadius: 18,
+                      spreadRadius: 0.6,
+                    ),
+                    BoxShadow(
+                      color: themeData.background.withValues(alpha: 0.55),
+                      blurRadius: 18,
+                      spreadRadius: -2,
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
           ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: themeData.accent.withValues(alpha: 0.42),
-                    blurRadius: 18,
-                  ),
-                ]
-              : null,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Material(
-          color: themeData.background,
-          child: InkWell(
-            onTap: onTap,
-            child: SizedBox(
-              height: 126,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  AnimatedThemeBackground(
-                    themeData: themeData,
-                    enabled: !reduceAnimations,
-                    isDark: true,
-                    child: const SizedBox.expand(),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                themeData.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                            if (selected)
-                              Icon(
-                                Icons.check_circle,
-                                color: themeData.secondary,
-                              ),
+          clipBehavior: Clip.antiAlias,
+          child: Material(
+            color: themeData.background,
+            child: InkWell(
+              onTap: onTap,
+              child: SizedBox(
+                height: 176,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    AnimatedThemeBackground(
+                      themeData: themeData,
+                      enabled: !reduceAnimations,
+                      isDark: true,
+                      child: const SizedBox.expand(),
+                    ),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.08),
+                            Colors.black.withValues(alpha: 0.56),
                           ],
                         ),
-                        const Spacer(),
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: themeData.buttonGradient,
-                            borderRadius: BorderRadius.circular(18),
-                            boxShadow: [
-                              BoxShadow(
-                                color: themeData.accent.withValues(alpha: 0.45),
-                                blurRadius: 12,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: themeData.secondary,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: themeData.secondary.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              const Expanded(
+                                child: Text(
+                                  'PRÉVIA DO TEMA',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ),
+                              AnimatedSwitcher(
+                                duration: reduceAnimations
+                                    ? Duration.zero
+                                    : const Duration(milliseconds: 180),
+                                child: selected
+                                    ? Icon(
+                                        Icons.check_circle_rounded,
+                                        key: const ValueKey('selected'),
+                                        color: themeData.secondary,
+                                        size: 20,
+                                      )
+                                    : const Icon(
+                                        Icons.circle_outlined,
+                                        key: ValueKey('unselected'),
+                                        color: Colors.white54,
+                                        size: 18,
+                                      ),
                               ),
                             ],
                           ),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 15,
+                          const SizedBox(height: 7),
+                          Text(
+                            themeData.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 19,
+                              height: 1.05,
+                            ),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
                               vertical: 7,
                             ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(13),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.15),
+                              ),
+                            ),
                             child: Row(
-                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  Icons.fiber_manual_record,
-                                  size: 14,
-                                  color: Colors.white,
+                                  Icons.videocam_rounded,
+                                  color: themeData.secondary,
+                                  size: 16,
                                 ),
-                                SizedBox(width: 6),
+                                const SizedBox(width: 6),
+                                const Expanded(
+                                  child: Text(
+                                    'B13 FALCON',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ),
                                 Text(
-                                  'Gravar',
+                                  '00:00',
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    fontSize: 9,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 9),
+                          Row(
+                            children: [
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: themeData.buttonGradient,
+                                  borderRadius: BorderRadius.circular(18),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: themeData.accent.withValues(
+                                        alpha: 0.4,
+                                      ),
+                                      blurRadius: 10,
+                                    ),
+                                  ],
+                                ),
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 11,
+                                    vertical: 6,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.fiber_manual_record_rounded,
+                                        size: 10,
+                                        color: Colors.white,
+                                      ),
+                                      SizedBox(width: 5),
+                                      Text(
+                                        'Gravar',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                selected ? 'ATIVO' : 'TOQUE PARA USAR',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.76),
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

@@ -28,6 +28,36 @@ class AppSettings {
     };
   }
 
+  static const _validResolutions = {
+    'native',
+    '360p',
+    '480p',
+    '540p',
+    '720p',
+    '1080p',
+    '1440p',
+  };
+  static const _validFps = {15, 24, 30, 45, 60, 90};
+  static const _validThemes = {
+    'falcon',
+    'ocean',
+    'emerald',
+    'violet',
+    'sunset',
+    'rose',
+    'arctic',
+    'black',
+  };
+
+  static int _readInt(Object? value, int fallback) =>
+      value is num && value.isFinite ? value.round() : fallback;
+
+  static String _readString(Object? value, String fallback) =>
+      value is String ? value : fallback;
+
+  static bool _readBool(Object? value, bool fallback) =>
+      value is bool ? value : fallback;
+
   final bool isDarkMode;
   final String preferredResolution;
   final int preferredFps;
@@ -83,6 +113,10 @@ class AppSettings {
     'ocean' => const Color(0xFF168AAD),
     'emerald' => const Color(0xFF16865A),
     'violet' => const Color(0xFF7950B8),
+    'sunset' => const Color(0xFFE45B37),
+    'rose' => const Color(0xFFD64078),
+    'arctic' => const Color(0xFF4E9CC7),
+    'black' => const Color(0xFFC9A85A),
     _ => const Color(0xFFB81C2B),
   };
 
@@ -104,27 +138,30 @@ class AppSettings {
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
+    final resolution = _readString(json['preferredResolution'], '1080p');
+    final fps = _readInt(json['preferredFps'], 30);
+    final theme = _readString(json['themeAccent'], 'falcon');
+    final opacityValue = json['floatingLogoOpacity'];
+    final opacity = opacityValue is num && opacityValue.isFinite
+        ? opacityValue.toDouble().clamp(0, 1).toDouble()
+        : 0.85;
+    final size = _readInt(json['floatingLogoSizeDp'], 56);
+    final bitrate = _readInt(json['bitrateKbps'], 16000);
+
     return AppSettings(
-      isDarkMode: json['isDarkMode'] as bool? ?? true,
-      preferredResolution: json['preferredResolution'] as String? ?? '1080p',
-      preferredFps: json['preferredFps'] as int? ?? 30,
-      bitrateKbps: json['bitrateKbps'] as int? ?? 16000,
+      isDarkMode: _readBool(json['isDarkMode'], true),
+      preferredResolution: _validResolutions.contains(resolution)
+          ? resolution
+          : '1080p',
+      preferredFps: _validFps.contains(fps) ? fps : 30,
+      bitrateKbps: bitrate.clamp(4000, 80000).toInt(),
       audioMode: normalizeAudioMode(json['audioMode']),
-      keepScreenOn: json['keepScreenOn'] as bool? ?? true,
-      showFloatingControls: json['showFloatingControls'] as bool? ?? true,
-      floatingLogoOpacity:
-          (json['floatingLogoOpacity'] as num?)
-              ?.toDouble()
-              .clamp(0, 1.0)
-              .toDouble() ??
-          0.85,
-      floatingLogoSizeDp:
-          (json['floatingLogoSizeDp'] as num?)?.toInt().clamp(32, 96) ?? 56,
-      useInternalAudio: json['useInternalAudio'] as bool? ?? false,
-      themeAccent: switch (json['themeAccent'] as String?) {
-        'ocean' || 'emerald' || 'violet' => json['themeAccent'] as String,
-        _ => 'falcon',
-      },
+      keepScreenOn: _readBool(json['keepScreenOn'], true),
+      showFloatingControls: _readBool(json['showFloatingControls'], true),
+      floatingLogoOpacity: opacity,
+      floatingLogoSizeDp: size.clamp(32, 96).toInt(),
+      useInternalAudio: _readBool(json['useInternalAudio'], false),
+      themeAccent: _validThemes.contains(theme) ? theme : 'falcon',
       codec: json['codec'] == 'hevc' ? 'hevc' : 'h264',
       orientation: switch (json['orientation']) {
         'portrait' || 'landscape' => json['orientation'] as String,

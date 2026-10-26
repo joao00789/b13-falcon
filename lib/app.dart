@@ -116,13 +116,13 @@ class _B13FalconAppState extends State<B13FalconApp> {
   }
 
   Future<void> _loadSettings() async {
-    final settings = await _settingsService.loadSettings();
+    var settings = await _settingsService.loadSettings();
     if (!mounted) return;
     setState(() => _settings = settings);
     try {
       await _nativeRecorder.setKeepScreenOn(settings.keepScreenOn);
       if (settings.showFloatingControls) {
-        await _nativeRecorder.setFloatingControls(
+        final enabled = await _nativeRecorder.setFloatingControls(
           enabled: true,
           opacity: settings.floatingLogoOpacity,
           sizeDp: settings.floatingLogoSizeDp,
@@ -134,6 +134,18 @@ class _B13FalconAppState extends State<B13FalconApp> {
           orientation: settings.orientation,
           bitratePreset: settings.bitratePreset,
         );
+        if (!enabled) {
+          settings = settings.copyWith(showFloatingControls: false);
+          await _settingsService.saveSettings(settings);
+          if (mounted) {
+            setState(() {
+              _settings = settings;
+              _statusMessage =
+                  'Controles flutuantes desativados: autorize a sobreposição '
+                  'novamente nos ajustes.';
+            });
+          }
+        }
       }
     } on PlatformException catch (error) {
       if (mounted) {

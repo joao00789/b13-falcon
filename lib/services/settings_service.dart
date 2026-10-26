@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models/app_settings.dart';
@@ -19,9 +20,20 @@ class SettingsService {
       if (decoded is Map<String, dynamic>) {
         return AppSettings.fromJson(decoded);
       }
-    } catch (_) {}
-
-    return const AppSettings();
+      throw const FormatException('As configurações salvas não são um objeto.');
+    } on FormatException catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'B13 FALCON settings',
+          context: ErrorDescription(
+            'ao ler configurações salvas; os valores padrão serão usados',
+          ),
+        ),
+      );
+      return const AppSettings();
+    }
   }
 
   Future<void> saveSettings(AppSettings settings) async {

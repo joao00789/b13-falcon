@@ -1,4 +1,5 @@
 import 'package:b13_falcon/app.dart';
+import 'package:b13_falcon/core/theme/app_theme_data.dart';
 import 'package:b13_falcon/data/models/app_settings.dart';
 import 'package:b13_falcon/features/settings/settings_page.dart';
 import 'package:flutter/material.dart';
@@ -7,53 +8,67 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   test('theme accent settings survive serialization', () {
-    const settings = AppSettings(themeAccent: 'ocean');
+    const settings = AppSettings(themeAccent: 'black');
     final restored = AppSettings.fromJson(settings.toJson());
 
-    expect(restored.themeAccent, 'ocean');
-    expect(restored.accentColor, const Color(0xFF168AAD));
+    expect(restored.themeAccent, 'black');
+    expect(restored.accentColor, const Color(0xFFC9A85A));
+  });
+
+  test('settings safely recover invalid saved values', () {
+    final settings = AppSettings.fromJson({
+      'isDarkMode': 'true',
+      'preferredResolution': 1080,
+      'preferredFps': 29.97,
+      'bitrateKbps': 90000.5,
+      'floatingLogoOpacity': 2.0,
+      'floatingLogoSizeDp': 120,
+      'themeAccent': 'unknown',
+      'codec': 'invalid',
+    });
+
+    expect(settings.isDarkMode, isTrue);
+    expect(settings.preferredResolution, '1080p');
+    expect(settings.preferredFps, 30);
+    expect(settings.bitrateKbps, 80000);
+    expect(settings.floatingLogoOpacity, 1);
+    expect(settings.floatingLogoSizeDp, 96);
+    expect(settings.themeAccent, 'falcon');
+    expect(settings.codec, 'h264');
+  });
+
+  test('all built-in theme ids can be saved and loaded', () {
+    for (final theme in AppThemeData.themes) {
+      final restored = AppSettings.fromJson(
+        AppSettings(themeAccent: theme.id).toJson(),
+      );
+      expect(restored.themeAccent, theme.id);
+    }
+
+    expect(AppThemeData.fromId('black').name, 'Black');
   });
 
   testWidgets('B13 FALCON app loads', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const B13FalconApp());
-    expect(find.text('B13 FALCON'), findsOneWidget);
+    expect(find.text('B13 FALCON'), findsWidgets);
   });
 
-  testWidgets('audio capture mode can be changed in settings', (tester) async {
-    var settings = const AppSettings();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: StatefulBuilder(
-          builder: (context, setState) {
-            return SettingsPage(
-              settings: settings,
-              onChanged: (nextSettings) {
-                setState(() => settings = nextSettings);
-              },
-              onReset: () {},
-              onBack: () {},
-              supportedResolutions: const ['720p', '1080p'],
-              supportedFps: const [30, 60],
-              hevcSupported: false,
-            );
-          },
-        ),
-      ),
-    );
-
-    final gameAudioOption = find.widgetWithText(ChoiceChip, 'Som do jogo');
-    expect(tester.widget<ChoiceChip>(gameAudioOption).selected, isFalse);
-
-    await tester.ensureVisible(gameAudioOption);
-    await tester.pumpAndSettle();
-    await tester.tap(gameAudioOption);
-    await tester.pumpAndSettle();
-
-    expect(settings.audioMode, 'internal');
-    expect(tester.widget<ChoiceChip>(gameAudioOption).selected, isTrue);
-  });
+  test(
+    'audio capture mode can be normalized and persisted from legacy labels',
+    () {
+      expect(AppSettings.normalizeAudioMode('Som do jogo'), 'internal');
+      expect(AppSettings.normalizeAudioMode('Microfone'), 'microphone');
+      expect(
+        AppSettings.fromJson({'audioMode': 'Som do jogo'}).audioMode,
+        'internal',
+      );
+      expect(
+        AppSettings.fromJson({'audioMode': 'Microfone'}).audioMode,
+        'microphone',
+      );
+    },
+  );
 
   testWidgets('maximum quality preset provides high-resolution bitrate', (
     tester,

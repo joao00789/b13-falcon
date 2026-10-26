@@ -72,7 +72,7 @@ class SettingsPage extends StatelessWidget {
                   Text('Temas animados', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 12),
                   SizedBox(
-                    height: 138,
+                    height: 190,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: AppThemeData.themes.length,
