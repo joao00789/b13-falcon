@@ -62,6 +62,11 @@ class RecordingService : Service() {
         val info: MediaCodec.BufferInfo,
     )
 
+    private data class PauseInterval(
+        val startRealtimeUs: Long,
+        var endRealtimeUs: Long? = null,
+    )
+
     private var projection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var encoder: MediaCodec? = null
@@ -93,6 +98,9 @@ class RecordingService : Service() {
     private var audioTrack = -1
     private val muxerLock = Any()
     private val pendingSamples = mutableListOf<EncodedSample>()
+    private val pauseIntervals = mutableListOf<PauseInterval>()
+    private var videoClockOffsetUs: Long? = null
+    private var videoStartPresentationTimeUs: Long? = null
     private val microphoneFrames = ArrayBlockingQueue<ShortArray>(4)
     private val playbackFrames = ArrayBlockingQueue<ShortArray>(4)
 
@@ -131,6 +139,9 @@ class RecordingService : Service() {
             ACTION_PAUSE -> {
                 if (recording && !paused) {
                     virtualDisplay?.setSurface(null)
+                    synchronized(pauseIntervals) {
+                        pauseIntervals.add(PauseInterval(System.nanoTime() / 1000L))
+                    }
                     paused = true
                     getSystemService(NotificationManager::class.java)
                         .notify(NOTIFICATION_ID, buildNotification("Gravação pausada"))
@@ -140,6 +151,9 @@ class RecordingService : Service() {
             ACTION_RESUME -> {
                 if (recording && paused) {
                     virtualDisplay?.setSurface(encoderInputSurface)
+                    synchronized(pauseIntervals) {
+                        pauseIntervals.lastOrNull()?.endRealtimeUs = System.nanoTime() / 1000L
+                    }
                     paused = false
                     getSystemService(NotificationManager::class.java)
                         .notify(NOTIFICATION_ID, buildNotification("B13 FALCON gravando..."))
@@ -211,6 +225,9 @@ class RecordingService : Service() {
         audioTrack = -1
         muxerStarted = false
         synchronized(muxerLock) { pendingSamples.clear() }
+        synchronized(pauseIntervals) { pauseIntervals.clear() }
+        videoClockOffsetUs = null
+        videoStartPresentationTimeUs = null
         microphoneFrames.clear()
         playbackFrames.clear()
 
@@ -367,6 +384,12 @@ class RecordingService : Service() {
         val audioCodec = audioEncoder ?: return
         var presentationTimeUs = 0L
         while (recording) {
+            if (paused) {
+                microphoneFrames.clear()
+                playbackFrames.clear()
+                TimeUnit.MILLISECONDS.sleep(10)
+                continue
+            }
             val microphone = if (microphoneRequired && !paused) {
                 microphoneFrames.poll(10, TimeUnit.MILLISECONDS)
             } else {
@@ -383,20 +406,17 @@ class RecordingService : Service() {
                 ?.order(java.nio.ByteOrder.LITTLE_ENDIAN) ?: continue
             inputBuffer.clear()
             for (index in 0 until AUDIO_FRAME_SAMPLES) {
-                val mixed = if (paused) {
-                    0
-                } else {
-                    val mic = microphone?.getOrNull(index)?.toInt() ?: 0
-                    val game = playback?.getOrNull(index)?.toInt() ?: 0
-                    val combined = when {
-                        microphoneRequired && playbackRequired -> (mic + game) / 2
-                        microphoneRequired -> mic
-                        playbackRequired -> game
-                        else -> 0
-                    }
-                    combined.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                val mic = microphone?.getOrNull(index)?.toInt() ?: 0
+                val game = playback?.getOrNull(index)?.toInt() ?: 0
+                val combined = when {
+                    microphoneRequired && playbackRequired -> (mic + game) / 2
+                    microphoneRequired -> mic
+                    playbackRequired -> game
+                    else -> 0
                 }
-                inputBuffer.putShort(mixed.toShort())
+                inputBuffer.putShort(
+                    combined.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort(),
+                )
             }
             audioCodec.queueInputBuffer(
                 inputIndex,
@@ -458,7 +478,16 @@ class RecordingService : Service() {
                     index >= 0 -> {
                         val buffer = localEncoder.getOutputBuffer(index)
                         if (buffer != null && localBufferInfo.size > 0) {
-                            writeMuxerSample(videoTrack, buffer, localBufferInfo)
+                            val adjustedPresentationTimeUs =
+                                normalizeVideoPresentationTimeUs(localBufferInfo.presentationTimeUs)
+                            if (adjustedPresentationTimeUs != null) {
+                                writeMuxerSample(
+                                    videoTrack,
+                                    buffer,
+                                    localBufferInfo,
+                                    adjustedPresentationTimeUs,
+                                )
+                            }
                         }
                         outputEnded =
                             localBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
@@ -515,6 +544,7 @@ class RecordingService : Service() {
         track: Int,
         source: java.nio.ByteBuffer,
         sourceInfo: MediaCodec.BufferInfo,
+        presentationTimeUs: Long = sourceInfo.presentationTimeUs,
     ) {
         synchronized(muxerLock) {
             if (track < 0 || sourceInfo.size <= 0) return
@@ -525,13 +555,37 @@ class RecordingService : Service() {
             }
             data.put(sample).flip()
             val info = MediaCodec.BufferInfo().apply {
-                set(0, sourceInfo.size, sourceInfo.presentationTimeUs, sourceInfo.flags)
+                set(0, sourceInfo.size, presentationTimeUs, sourceInfo.flags)
             }
             if (muxerStarted) {
                 muxer!!.writeSampleData(track, data, info)
             } else {
                 pendingSamples.add(EncodedSample(track, data, info))
             }
+        }
+    }
+
+    private fun normalizeVideoPresentationTimeUs(presentationTimeUs: Long): Long? {
+        synchronized(pauseIntervals) {
+            if (videoClockOffsetUs == null) {
+                videoClockOffsetUs = System.nanoTime() / 1000L - presentationTimeUs
+                videoStartPresentationTimeUs = presentationTimeUs
+            }
+            val clockOffset = videoClockOffsetUs ?: return presentationTimeUs
+            val recordingStart = videoStartPresentationTimeUs ?: presentationTimeUs
+            var removedPauseDurationUs = 0L
+            for (interval in pauseIntervals) {
+                val startUs = interval.startRealtimeUs - clockOffset
+                val endUs = interval.endRealtimeUs?.minus(clockOffset)
+                if (presentationTimeUs >= startUs && (endUs == null || presentationTimeUs < endUs)) {
+                    return null
+                }
+                if (endUs != null && presentationTimeUs >= endUs) {
+                    removedPauseDurationUs += endUs - startUs
+                }
+            }
+            return (presentationTimeUs - recordingStart - removedPauseDurationUs)
+                .coerceAtLeast(0L)
         }
     }
 

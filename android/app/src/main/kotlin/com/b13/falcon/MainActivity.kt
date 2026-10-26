@@ -36,6 +36,7 @@ class MainActivity : FlutterActivity() {
     private var pendingAudioCall: MethodCall? = null
     private var isRecording = false
     private var isPaused = false
+    private var floatingControlsEnabled = true
     private var statusReceiverRegistered = false
 
     private val recordingStatusReceiver = object : BroadcastReceiver() {
@@ -43,6 +44,7 @@ class MainActivity : FlutterActivity() {
             val state = intent?.getStringExtra("state") ?: return
             isRecording = state == "recording" || state == "paused"
             isPaused = state == "paused"
+            if (!isRecording) floatingControlsEnabled = false
             if (::channel.isInitialized) {
                 channel.invokeMethod(
                     "recordingStatusChanged",
@@ -66,6 +68,7 @@ class MainActivity : FlutterActivity() {
                 "openRecording" -> handleOpenRecording(call, result)
                 "deleteRecording" -> handleDeleteRecording(call, result)
                 "setKeepScreenOn" -> handleKeepScreenOn(call, result)
+                "setFloatingLogoOpacity" -> handleFloatingLogoOpacity(call, result)
                 "requestOverlayPermission" -> handleOverlayPermission(result)
                 else -> result.notImplemented()
             }
@@ -140,6 +143,8 @@ class MainActivity : FlutterActivity() {
         val fps = call.argument<Int>("fps") ?: 30
         val bitrate = call.argument<Int>("bitrateKbps") ?: 8000
         val showFloatingControls = call.argument<Boolean>("showFloatingControls") ?: true
+        val floatingLogoOpacity = (call.argument<Double>("floatingLogoOpacity") ?: 0.85)
+            .coerceIn(0.2, 1.0)
         pendingParams = mapOf(
             "title" to title,
             "resolution" to resolution,
@@ -147,6 +152,7 @@ class MainActivity : FlutterActivity() {
             "bitrateKbps" to bitrate,
             "audioMode" to audioMode,
             "showFloatingControls" to showFloatingControls,
+            "floatingLogoOpacity" to floatingLogoOpacity,
         )
 
         val projectionManager = getSystemService(MediaProjectionManager::class.java)
@@ -179,6 +185,7 @@ class MainActivity : FlutterActivity() {
         }
         isRecording = false
         isPaused = false
+        floatingControlsEnabled = false
         result.success(mapOf("success" to true, "message" to "Gravação finalizada."))
     }
 
@@ -336,6 +343,18 @@ class MainActivity : FlutterActivity() {
         result.success(null)
     }
 
+    private fun handleFloatingLogoOpacity(call: MethodCall, result: MethodChannel.Result) {
+        val opacity = (call.argument<Double>("opacity") ?: 0.85).coerceIn(0.2, 1.0)
+        if (isRecording && floatingControlsEnabled) {
+            startService(
+                Intent(this, FloatingControlsService::class.java)
+                    .setAction(FloatingControlsService.ACTION_UPDATE_OPACITY)
+                    .putExtra("logoOpacity", opacity),
+            )
+        }
+        result.success(null)
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_OVERLAY_PERMISSION) {
@@ -366,10 +385,16 @@ class MainActivity : FlutterActivity() {
                     }
                     val showFloatingControls =
                         pendingParams?.get("showFloatingControls") as? Boolean ?: true
+                    floatingControlsEnabled = showFloatingControls
                     if (showFloatingControls &&
                         (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this))
                     ) {
-                        startService(Intent(this, FloatingControlsService::class.java))
+                        val floatingIntent = Intent(this, FloatingControlsService::class.java)
+                            .putExtra(
+                                "logoOpacity",
+                                pendingParams?.get("floatingLogoOpacity") as? Double ?: 0.85,
+                            )
+                        startService(floatingIntent)
                     }
                     isRecording = true
                     isPaused = false

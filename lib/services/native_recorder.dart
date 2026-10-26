@@ -36,6 +36,7 @@ class RecordingNativeBridge {
     required int bitrateKbps,
     required String audioMode,
     required bool showFloatingControls,
+    required double floatingLogoOpacity,
   }) async {
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
@@ -47,6 +48,7 @@ class RecordingNativeBridge {
           'bitrateKbps': bitrateKbps,
           'audioMode': audioMode,
           'showFloatingControls': showFloatingControls,
+          'floatingLogoOpacity': floatingLogoOpacity,
         },
       );
       return Map<String, dynamic>.from(result ?? const <dynamic, dynamic>{});
@@ -138,5 +140,11 @@ class RecordingNativeBridge {
 
   Future<void> setKeepScreenOn(bool enabled) async {
     await _channel.invokeMethod<void>('setKeepScreenOn', {'enabled': enabled});
+  }
+
+  Future<void> setFloatingLogoOpacity(double opacity) async {
+    await _channel.invokeMethod<void>('setFloatingLogoOpacity', {
+      'opacity': opacity,
+    });
   }
 }

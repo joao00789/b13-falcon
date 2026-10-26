@@ -25,6 +25,7 @@ import android.widget.TextView
 class FloatingControlsService : Service() {
     companion object {
         const val ACTION_DISMISS = "com.b13.falcon.overlay.DISMISS"
+        const val ACTION_UPDATE_OPACITY = "com.b13.falcon.overlay.UPDATE_OPACITY"
     }
 
     private lateinit var windowManager: WindowManager
@@ -35,6 +36,7 @@ class FloatingControlsService : Service() {
     private var expanded = false
     private var bubbleDragged = false
     private var paused = false
+    private var logoOpacity = 0.85f
     private data class Stroke(val path: Path, val paint: Paint)
 
     private val recordingReceiver = object : BroadcastReceiver() {
@@ -68,10 +70,23 @@ class FloatingControlsService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_DISMISS) {
             stopSelf()
+        } else if (intent?.action == ACTION_UPDATE_OPACITY) {
+            updateLogoOpacity(intent)
         } else {
+            logoOpacity = (intent?.getDoubleExtra("logoOpacity", 0.85) ?: 0.85)
+                .toFloat()
+                .coerceIn(0.2f, 1f)
             showControls()
         }
         return START_NOT_STICKY
+    }
+
+    private fun updateLogoOpacity(intent: Intent?) {
+        logoOpacity = (intent?.getDoubleExtra("logoOpacity", logoOpacity.toDouble())
+            ?: logoOpacity.toDouble())
+            .toFloat()
+            .coerceIn(0.2f, 1f)
+        controlsView?.findViewWithTag<ImageView>("bubble_logo")?.alpha = logoOpacity
     }
 
     private fun showControls() {
@@ -88,6 +103,8 @@ class FloatingControlsService : Service() {
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = roundedBackground(0xFFB81C2B.toInt(), dp(28).toFloat())
             clipToOutline = true
+            alpha = logoOpacity
+            tag = "bubble_logo"
             setImageDrawable(packageManager.getApplicationIcon(packageName))
             setOnTouchListener(::handleBubbleTouch)
         }

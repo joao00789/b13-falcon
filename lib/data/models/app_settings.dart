@@ -9,6 +9,7 @@ class AppSettings {
     this.audioMode = 'both',
     this.keepScreenOn = true,
     this.showFloatingControls = true,
+    this.floatingLogoOpacity = 0.85,
     this.useInternalAudio = false,
   });
 
@@ -19,6 +20,7 @@ class AppSettings {
   final String audioMode;
   final bool keepScreenOn;
   final bool showFloatingControls;
+  final double floatingLogoOpacity;
   final bool useInternalAudio;
 
   AppSettings copyWith({
@@ -29,6 +31,7 @@ class AppSettings {
     String? audioMode,
     bool? keepScreenOn,
     bool? showFloatingControls,
+    double? floatingLogoOpacity,
     bool? useInternalAudio,
   }) {
     return AppSettings(
@@ -39,6 +42,7 @@ class AppSettings {
       audioMode: audioMode ?? this.audioMode,
       keepScreenOn: keepScreenOn ?? this.keepScreenOn,
       showFloatingControls: showFloatingControls ?? this.showFloatingControls,
+      floatingLogoOpacity: floatingLogoOpacity ?? this.floatingLogoOpacity,
       useInternalAudio: useInternalAudio ?? this.useInternalAudio,
     );
   }
@@ -53,6 +57,7 @@ class AppSettings {
     'audioMode': audioMode,
     'keepScreenOn': keepScreenOn,
     'showFloatingControls': showFloatingControls,
+    'floatingLogoOpacity': floatingLogoOpacity,
     'useInternalAudio': useInternalAudio,
   };
 
@@ -65,6 +70,12 @@ class AppSettings {
       audioMode: json['audioMode'] as String? ?? 'Microfone',
       keepScreenOn: json['keepScreenOn'] as bool? ?? true,
       showFloatingControls: json['showFloatingControls'] as bool? ?? true,
+      floatingLogoOpacity:
+          (json['floatingLogoOpacity'] as num?)
+              ?.toDouble()
+              .clamp(0.2, 1.0)
+              .toDouble() ??
+          0.85,
       useInternalAudio: json['useInternalAudio'] as bool? ?? false,
     );
   }

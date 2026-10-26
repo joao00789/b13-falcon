@@ -116,6 +116,53 @@ class SettingsPage extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           EntranceAnimation(
+            delay: const Duration(milliseconds: 190),
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: theme.dividerColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Opacidade da logo flutuante',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      Text(
+                        '${(settings.floatingLogoOpacity * 100).round()}%',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Slider(
+                    min: 0.2,
+                    max: 1,
+                    divisions: 8,
+                    value: settings.floatingLogoOpacity,
+                    label: '${(settings.floatingLogoOpacity * 100).round()}%',
+                    onChanged: (value) => onChanged(
+                      settings.copyWith(floatingLogoOpacity: value),
+                    ),
+                  ),
+                  Text(
+                    'Ajuste a transparência da bolha para ela atrapalhar menos durante o jogo.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          EntranceAnimation(
             delay: const Duration(milliseconds: 220),
             child: Container(
               padding: const EdgeInsets.all(18),

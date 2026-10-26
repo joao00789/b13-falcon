@@ -145,6 +145,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
         bitrateKbps: _settings.bitrateKbps,
         audioMode: _settings.audioMode,
         showFloatingControls: _settings.showFloatingControls,
+        floatingLogoOpacity: _settings.floatingLogoOpacity,
       );
       if (!mounted) return;
       if (result['success'] == true) {
@@ -230,6 +231,24 @@ class _B13FalconAppState extends State<B13FalconApp> {
         return;
       }
     }
+    if (nextSettings.floatingLogoOpacity != _settings.floatingLogoOpacity &&
+        _isRecording &&
+        nextSettings.showFloatingControls) {
+      try {
+        await _nativeRecorder.setFloatingLogoOpacity(
+          nextSettings.floatingLogoOpacity,
+        );
+      } on PlatformException catch (error) {
+        _showMessage(
+          'Não foi possível atualizar a opacidade da bolha: '
+          '${error.message ?? 'erro desconhecido'}',
+        );
+      } on MissingPluginException {
+        _showMessage(
+          'A bolha flutuante está disponível no aplicativo Android.',
+        );
+      }
+    }
     await _settingsService.saveSettings(nextSettings);
     if (mounted) setState(() => _settings = nextSettings);
   }
@@ -240,6 +259,11 @@ class _B13FalconAppState extends State<B13FalconApp> {
     setState(() => _settings = const AppSettings());
     try {
       await _nativeRecorder.setKeepScreenOn(_settings.keepScreenOn);
+      if (_isRecording && _settings.showFloatingControls) {
+        await _nativeRecorder.setFloatingLogoOpacity(
+          _settings.floatingLogoOpacity,
+        );
+      }
     } on PlatformException catch (error) {
       _showMessage(
         'Configurações restauradas, mas não foi possível aplicar a tela ligada: '
@@ -455,11 +479,14 @@ class _B13FalconAppState extends State<B13FalconApp> {
                   ? const Icon(Icons.close_rounded, key: ValueKey('close'))
                   : ClipOval(
                       key: const ValueKey('logo'),
-                      child: Image.asset(
-                        'logo B13 falcon.png',
-                        fit: BoxFit.cover,
-                        width: 56,
-                        height: 56,
+                      child: Opacity(
+                        opacity: _settings.floatingLogoOpacity,
+                        child: Image.asset(
+                          'logo B13 falcon.png',
+                          fit: BoxFit.cover,
+                          width: 56,
+                          height: 56,
+                        ),
                       ),
                     ),
             ),
