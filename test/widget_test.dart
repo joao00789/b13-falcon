@@ -54,4 +54,21 @@ void main() {
     expect(settings.audioMode, 'internal');
     expect(tester.widget<ChoiceChip>(gameAudioOption).selected, isTrue);
   });
+
+  testWidgets('maximum quality preset provides high-resolution bitrate', (
+    tester,
+  ) async {
+    const settings = AppSettings(
+      preferredResolution: '1440p',
+      preferredFps: 90,
+    );
+
+    expect(SettingsPage.recommendedBitrate('1440p', 90, 'maximum'), 80000);
+    expect(
+      settings
+          .copyWith(bitratePreset: 'maximum', bitrateKbps: 80000)
+          .bitrateKbps,
+      80000,
+    );
+  });
 }

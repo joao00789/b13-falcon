@@ -48,10 +48,10 @@ class FloatingControlsService : Service() {
     private var settingsView: View? = null
     private var drawingView: DrawingOverlayView? = null
     private var actionButtons: LinearLayout? = null
-    private var startButton: TextView? = null
-    private var pauseButton: TextView? = null
-    private var drawButton: TextView? = null
-    private var stopButton: TextView? = null
+    private var startButton: ImageView? = null
+    private var pauseButton: ImageView? = null
+    private var drawButton: ImageView? = null
+    private var stopButton: ImageView? = null
     private var overlayParams: WindowManager.LayoutParams? = null
     private var expanded = false
     private var bubbleDragged = false
@@ -179,7 +179,10 @@ class FloatingControlsService : Service() {
             gravity = Gravity.CENTER
             visibility = if (expanded) View.VISIBLE else View.GONE
         }
-        pauseButton = createButton(if (paused) "▶" else "Ⅱ", "Pausar ou retomar gravação") {
+        pauseButton = createIconButton(
+            if (paused) R.drawable.ic_lucide_play else R.drawable.ic_lucide_pause,
+            "Pausar ou retomar gravação",
+        ) {
             sendRecordingAction(
                 if (paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE,
             )
@@ -187,23 +190,26 @@ class FloatingControlsService : Service() {
             it.tag = "pause"
             buttons.addView(it, buttonLayoutParams())
         }
-        startButton = createButton("●", "Iniciar gravação") {
+        startButton = createIconButton(R.drawable.ic_lucide_play, "Iniciar gravação") {
             startCaptureFromFloating()
         }.also { buttons.addView(it, buttonLayoutParams()) }
-        drawButton = createButton("✎", "Ativar pincel para desenhar na tela") {
+        drawButton = createIconButton(
+            R.drawable.ic_lucide_brush,
+            "Ativar pincel para desenhar na tela",
+        ) {
             showDrawingLayer()
         }.also { buttons.addView(it, buttonLayoutParams()) }
         buttons.addView(
-            createButton("⚙", "Configurar pincel e opacidade") {
+            createIconButton(R.drawable.ic_lucide_settings, "Configurar pincel e opacidade") {
                 showSettingsPanel()
             },
             buttonLayoutParams(),
         )
-        stopButton = createButton("×", "Parar gravação") {
+        stopButton = createIconButton(R.drawable.ic_lucide_square, "Parar gravação") {
             sendRecordingAction(RecordingService.ACTION_STOP)
         }.also { buttons.addView(it, buttonLayoutParams()) }
         buttons.addView(
-            createButton("✕", "Fechar controles flutuantes") {
+            createIconButton(R.drawable.ic_lucide_close, "Fechar controles flutuantes") {
                 startService(Intent(this, FloatingControlsService::class.java).setAction(ACTION_DISMISS))
             },
             buttonLayoutParams(),
@@ -368,7 +374,10 @@ class FloatingControlsService : Service() {
             LinearLayout.LayoutParams(dp(92), dp(46)),
         )
         actions.addView(
-            createButton("✎", "Ativar pincel com estas configurações") {
+            createIconButton(
+                R.drawable.ic_lucide_brush,
+                "Ativar pincel com estas configurações",
+            ) {
                 showDrawingLayer()
             },
             buttonLayoutParams(),
@@ -453,7 +462,9 @@ class FloatingControlsService : Service() {
         startButton?.visibility = if (recording) View.GONE else View.VISIBLE
         pauseButton?.let {
             it.visibility = if (recording) View.VISIBLE else View.GONE
-            it.text = if (paused) "▶" else "Ⅱ"
+            it.setImageResource(
+                if (paused) R.drawable.ic_lucide_play else R.drawable.ic_lucide_pause,
+            )
             it.contentDescription = if (paused) "Retomar gravação" else "Pausar gravação"
         }
         drawButton?.visibility = if (recording) View.VISIBLE else View.GONE
@@ -476,6 +487,34 @@ class FloatingControlsService : Service() {
         gravity = Gravity.CENTER
         setTextColor(Color.WHITE)
         setTypeface(typeface, Typeface.BOLD)
+        background = roundedBackground(
+            0xFFB81C2B.toInt(),
+            dp(logoSizeDp / 2).toFloat(),
+        )
+        setOnTouchListener { button, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    button.animate().scaleX(0.94f).scaleY(0.94f).setDuration(90).start()
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    button.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+                }
+            }
+            false
+        }
+        setOnClickListener { onClick() }
+    }
+
+    private fun createIconButton(
+        icon: Int,
+        description: String,
+        onClick: () -> Unit,
+    ): ImageView = ImageView(this).apply {
+        contentDescription = description
+        scaleType = ImageView.ScaleType.CENTER_INSIDE
+        setPadding(dp(logoSizeDp / 4), dp(logoSizeDp / 4), dp(logoSizeDp / 4), dp(logoSizeDp / 4))
+        setImageResource(icon)
+        setColorFilter(Color.WHITE)
         background = roundedBackground(
             0xFFB81C2B.toInt(),
             dp(logoSizeDp / 2).toFloat(),
@@ -645,14 +684,15 @@ class FloatingControlsService : Service() {
             Color.YELLOW,
             Color.RED,
         )
-        private val pickerLeft get() = dp(18).toFloat()
-        private val pickerRight get() = width - dp(18).toFloat()
+        private val pickerLeft get() =
+            ((width - minOf(dp(280), width - dp(36))) / 2f)
+        private val pickerRight get() = pickerLeft + minOf(dp(280), width - dp(36))
         private val pickerTop get() = dp(132).toFloat()
-        private val pickerBottom get() = pickerTop + dp(156)
-        private val hueTop get() = pickerBottom + dp(14)
-        private val hueBottom get() = hueTop + dp(18)
-        private val opacityTop get() = hueBottom + dp(18)
-        private val opacityBottom get() = opacityTop + dp(18)
+        private val pickerBottom get() = pickerTop + dp(96)
+        private val hueTop get() = pickerBottom + dp(10)
+        private val hueBottom get() = hueTop + dp(12)
+        private val opacityTop get() = hueBottom + dp(12)
+        private val opacityBottom get() = opacityTop + dp(12)
 
         init {
             contentDescription =
@@ -754,8 +794,16 @@ class FloatingControlsService : Service() {
 
         private fun drawToolbar(canvas: Canvas) {
             val cellWidth = width / 7f
-            val labels = listOf("Cor", "Livre", "Caixa", "Círculo", "Voltar", "Limpar", "Fechar")
-            labels.forEachIndexed { index, label ->
+            val iconResources = intArrayOf(
+                R.drawable.ic_lucide_palette,
+                R.drawable.ic_lucide_pencil,
+                R.drawable.ic_lucide_square,
+                R.drawable.ic_lucide_circle,
+                R.drawable.ic_lucide_undo,
+                R.drawable.ic_lucide_trash,
+                R.drawable.ic_lucide_close,
+            )
+            iconResources.forEachIndexed { index, iconResource ->
                 val centerX = cellWidth * (index + 0.5f)
                 val selected = when (index) {
                     0 -> colorPickerVisible
@@ -776,13 +824,13 @@ class FloatingControlsService : Service() {
                         controlPaint,
                     )
                 }
-                if (index == 0) {
-                    controlPaint.color = brushColor
-                    controlPaint.alpha = (brushOpacity * 255).roundToInt()
-                    canvas.drawCircle(centerX, dp(34).toFloat(), dp(8).toFloat(), controlPaint)
-                    controlPaint.alpha = 255
-                }
-                canvas.drawText(label, centerX, dp(56).toFloat(), labelPaint)
+                drawToolbarIcon(
+                    canvas,
+                    iconResource,
+                    centerX,
+                    dp(42).toFloat(),
+                    if (index == 0 && colorPickerVisible) brushColor else Color.WHITE,
+                )
             }
             labelPaint.textAlign = Paint.Align.LEFT
             labelPaint.textSize = dp(10).toFloat()
@@ -807,11 +855,32 @@ class FloatingControlsService : Service() {
             labelPaint.textAlign = Paint.Align.CENTER
         }
 
+        private fun drawToolbarIcon(
+            canvas: Canvas,
+            iconResource: Int,
+            centerX: Float,
+            centerY: Float,
+            tint: Int,
+        ) {
+            val icon = getDrawable(iconResource)?.mutate() ?: return
+            icon.setTint(tint)
+            val size = dp(20).toInt()
+            icon.setBounds(
+                (centerX - size / 2).toInt(),
+                (centerY - size / 2).toInt(),
+                (centerX + size / 2).toInt(),
+                (centerY + size / 2).toInt(),
+            )
+            val saveCount = canvas.save()
+            icon.draw(canvas)
+            canvas.restoreToCount(saveCount)
+        }
+
         private fun drawColorPicker(canvas: Canvas) {
             canvas.drawRoundRect(
-                dp(12).toFloat(),
+                pickerLeft - dp(12).toFloat(),
                 dp(120).toFloat(),
-                width - dp(12).toFloat(),
+                pickerRight + dp(12).toFloat(),
                 opacityBottom + dp(12),
                 dp(16).toFloat(),
                 dp(16).toFloat(),

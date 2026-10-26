@@ -18,6 +18,16 @@ class AppSettings {
     this.bitratePreset = 'custom',
   });
 
+  static String normalizeAudioMode(Object? value) {
+    return switch (value?.toString()) {
+      'both' || 'Interno + microfone' => 'both',
+      'internal' || 'Som do jogo' => 'internal',
+      'microphone' || 'Microfone' => 'microphone',
+      'none' || 'Sem áudio' => 'none',
+      _ => 'both',
+    };
+  }
+
   final bool isDarkMode;
   final String preferredResolution;
   final int preferredFps;
@@ -99,7 +109,7 @@ class AppSettings {
       preferredResolution: json['preferredResolution'] as String? ?? '1080p',
       preferredFps: json['preferredFps'] as int? ?? 30,
       bitrateKbps: json['bitrateKbps'] as int? ?? 16000,
-      audioMode: json['audioMode'] as String? ?? 'Microfone',
+      audioMode: normalizeAudioMode(json['audioMode']),
       keepScreenOn: json['keepScreenOn'] as bool? ?? true,
       showFloatingControls: json['showFloatingControls'] as bool? ?? true,
       floatingLogoOpacity:

@@ -144,10 +144,9 @@ class SettingsPage extends StatelessWidget {
                         ].map((option) {
                           final value = option.$1;
                           final label = option.$2;
-                          final selectedValue =
-                              settings.audioMode == 'Microfone'
-                              ? 'microphone'
-                              : settings.audioMode;
+                          final selectedValue = AppSettings.normalizeAudioMode(
+                            settings.audioMode,
+                          );
                           return ChoiceChip(
                             label: Text(label),
                             selected: selectedValue == value,
@@ -391,7 +390,7 @@ class SettingsPage extends StatelessWidget {
                                   settings.copyWith(bitratePreset: value),
                                 );
                               } else {
-                                final bitrate = _recommendedBitrate(
+                                final bitrate = SettingsPage.recommendedBitrate(
                                   settings.preferredResolution,
                                   settings.preferredFps,
                                   value,
@@ -421,10 +420,10 @@ class SettingsPage extends StatelessWidget {
                     ),
                     Slider(
                       min: 4,
-                      max: 30,
-                      divisions: 13,
+                      max: 80,
+                      divisions: 19,
                       value: (settings.bitrateKbps / 1000)
-                          .clamp(4, 30)
+                          .clamp(4, 80)
                           .toDouble(),
                       label: '${settings.bitrateKbps ~/ 1000} Mbps',
                       onChanged: (value) => onChanged(
@@ -441,7 +440,7 @@ class SettingsPage extends StatelessWidget {
                   ],
                   const SizedBox(height: 8),
                   Text(
-                    'Estimativa: ${(_estimatedMegabytesPerMinute(settings.bitrateKbps)).round()} MB por minuto.',
+                    'Estimativa: ${(SettingsPage.estimatedMegabytesPerMinute(settings.bitrateKbps)).round()} MB por minuto.',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
@@ -469,7 +468,7 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  int _recommendedBitrate(String resolution, int fps, String preset) {
+  static int recommendedBitrate(String resolution, int fps, String preset) {
     const pixelCounts = {
       '360p': 640 * 360,
       '480p': 854 * 480,
@@ -485,19 +484,19 @@ class SettingsPage extends StatelessWidget {
     final qualityFactor = switch (preset) {
       'economy' => 3.5,
       'high' => 10.0,
-      'maximum' => 16.0,
+      'maximum' => 32.0,
       _ => 6.0,
     };
-    return (base * fpsFactor * qualityFactor * 1000).round().clamp(4000, 30000);
+    return (base * fpsFactor * qualityFactor * 1000).round().clamp(4000, 80000);
   }
 
-  double _estimatedMegabytesPerMinute(int bitrateKbps) =>
+  static double estimatedMegabytesPerMinute(int bitrateKbps) =>
       ((bitrateKbps + 128) * 60 / 8) / 1000;
 
   AppSettings _updateAutomaticBitrate(AppSettings nextSettings) {
     if (nextSettings.bitratePreset == 'custom') return nextSettings;
     return nextSettings.copyWith(
-      bitrateKbps: _recommendedBitrate(
+      bitrateKbps: recommendedBitrate(
         nextSettings.preferredResolution,
         nextSettings.preferredFps,
         nextSettings.bitratePreset,

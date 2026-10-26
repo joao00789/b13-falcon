@@ -233,7 +233,7 @@ class RecordingService : Service() {
         displayWidth = ((sourceWidth * scale).toInt() / 2) * 2
         displayHeight = ((sourceHeight * scale).toInt() / 2) * 2
         frameRate = (intent.getIntExtra("fps", 30)).coerceIn(15, 90)
-        bitRate = (intent.getIntExtra("bitrateKbps", 16000).coerceIn(4_000, 30_000)) * 1000
+        bitRate = (intent.getIntExtra("bitrateKbps", 16000).coerceIn(4_000, 80_000)) * 1000
         val requestedMime = if (intent.getStringExtra("codec") == "hevc") HEVC_MIME else VIDEO_MIME
         videoMime = if (supportsVideoFormat(requestedMime)) requestedMime else VIDEO_MIME
         outputTitle = (intent.getStringExtra("title") ?: "B13_FALCON").replace(Regex("[^A-Za-z0-9_-]"), "_")
@@ -311,10 +311,14 @@ class RecordingService : Service() {
             .notify(NOTIFICATION_ID, buildNotification("B13 FALCON gravando..."))
         sendStatus(
             "recording",
-            if (playbackFallback) {
-                "Áudio interno exige Android 10 ou superior; gravando pelo microfone."
-            } else {
-                "Gravação em andamento."
+            buildString {
+                append("Gravação em andamento.")
+                if (requestedMime == HEVC_MIME && videoMime != HEVC_MIME) {
+                    append(" HEVC não suportado nesta resolução/FPS; usando H.264.")
+                }
+                if (playbackFallback) {
+                    append(" Áudio interno exige Android 10 ou superior; gravando pelo microfone.")
+                }
             },
         )
     }

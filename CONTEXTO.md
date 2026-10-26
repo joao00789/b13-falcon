@@ -2,7 +2,7 @@
 
 ## Visão geral
 
-Projeto: B13 FALCON v1.2.0+
+Projeto: B13 FALCON v1.2.1+
 
 - Plataforma: Android, app de gravação de tela com Flutter + Kotlin.
 - Arquitetura: UI em Flutter, captura/serviços nativos em Kotlin e comunicação por `MethodChannel` com canal `com.b13.falcon/recorder`.
@@ -49,7 +49,7 @@ Projeto: B13 FALCON v1.2.0+
 - `codec`: `'h264' | 'hevc'`
 - `orientation`: `'auto' | 'portrait' | 'landscape'`
 - `bitratePreset`: `'economy' | 'balanced' | 'high' | 'maximum' | 'custom'`
-- `bitrateKbps`: inteiro em kbps
+- `bitrateKbps`: 4.000 a 80.000 kbps (4 a 80 Mbps)
 
 ### Áudio
 
@@ -90,11 +90,18 @@ Mudanças principais:
 - Melhorias de estabilidade em `MainActivity` e `RecordingService`.
 - Reset do flag de flutuante para manter o overlay ativo após a gravação.
 
-### 2026-10-26 — Ajustes de validação
+### 2026-10-26 — Ajustes de validação e estabilização do teste
 
 - Correção de erro de classe aninhada em `app_theme_data.dart`.
 - Correção de estrutura do `ScaleOnPress` e ajuste de botões em `home_page.dart`.
+- Normalização de `audioMode` em `AppSettings.fromJson()` para aceitar valores do app e do histórico salvo em português.
+- Atualização do teste de preset Máxima para encontrar o chip pela label renderizada, evitando falha de widget não montado.
 - Validação com `flutter analyze` e `flutter test` concluída com sucesso no ambiente atual.
+
+### 2026-10-26 — Release de build por versionamento
+
+- Bump do build em `pubspec.yaml` para `1.2.1+7` para manter o número seguinte após a última divulgação e manter o controle de versão em CI.
+- O projeto segue pronto para a próxima geração do APK via GitHub Actions, com a versão registrada no código e no contexto.
 
 ## Decisões e limitações conhecidas
 
@@ -103,15 +110,16 @@ Mudanças principais:
 - A captura de qualidade/codec depende do suporte do aparelho; o app filtra opções quando `MediaCodecInfo.VideoCapabilities.areSizeAndRateSupported()` não aceita a combinação.
 - A orientação do vídeo é tratada no início da gravação; mudança dinâmica de rotação durante a gravação ainda não é implementada.
 - O flutuante permanece ativo enquanto a opção estiver ligada, mas a experiência final precisa ser validada em dispositivo Android real.
-- O ambiente atual não possui Android SDK instalado, então a compilação local do APK não foi concluída aqui; a geração do APK deve ser validada no GitHub Actions ou em um ambiente Android completo.
+- O ambiente atual não possui Android SDK instalado, então a compilação local do APK não é concluída aqui; a versão `v1.2.0` foi compilada com sucesso pelo GitHub Actions.
 
 ## Pendências
 
 - Finalizar revisão e ajuste do fluxo do overlay em dispositivos reais, especialmente a abertura do diálogo de MediaProjection a partir do botão flutuante.
 - Validar o comportamento do flutuante em segundo plano e dos estados `idle / recording / paused / stopped` na prática.
 - Confirmar se a sequência de permissão de microfone e `MediaProjection` funciona sem duplicidade em Android 13/14.
-- Executar o push para o GitHub e verificar o workflow de build do APK.
-- Criar e publicar tag de release quando a versão estiver pronta para distribuição.
+- Validar em telefone a qualidade real em 1440p/90 FPS e comparar o arquivo original com a exportação do CapCut, mantendo as configurações de exportação do editor em alta qualidade.
+- Verificar em telefone qual codec foi realmente selecionado; aparelhos que não suportarem HEVC naquela resolução/FPS recebem aviso e usam H.264.
+- Compilar e publicar a release `v1.2.1` após as verificações de CI.
 
 ## Observações finais
 
@@ -126,3 +134,11 @@ Mudanças principais:
 - Validação local repetida: `dart format --set-exit-if-changed lib test`, `flutter analyze` e `flutter test` passaram.
 - A primeira repetição passou por análise e testes, mas encontrou duas falhas Kotlin no build: a função de suporte do codec estava aninhada dentro do encoder e não podia ser chamada.
 - A função `supportsVideoFormat` foi movida para o escopo da classe. A compilação do APK e a publicação da release dependem da nova execução do GitHub Actions.
+
+### 2026-10-26 — Qualidade de vídeo e controles do pincel
+
+- Aumentado o limite de bitrate de 30 para 80 Mbps no app e no codificador nativo. O preset Máxima agora usa fator maior, e o valor é calculado considerando resolução e FPS, até esse limite.
+- O serviço informa quando HEVC não é suportado na combinação específica de resolução/FPS e usa H.264 como fallback.
+- Ícones Lucide baixados do GitHub substituem os glifos no menu do flutuante e na barra de desenho. SVGs de origem e licença ISC ficam em `assets/icons/lucide/`; drawables Android equivalentes ficam em `android/app/src/main/res/drawable/`.
+- Reduzida a área do color picker, que agora tem largura limitada e controles HSV menores.
+- Adicionado teste para o bitrate do preset Máxima em 1440p/90 FPS.
