@@ -54,6 +54,7 @@ class RecordingService : Service() {
         private const val AUDIO_MIME = "audio/mp4a-latm"
         private const val AUDIO_SAMPLE_RATE = 48_000
         private const val AUDIO_FRAME_SAMPLES = 960
+        private const val PLAYBACK_CHANNELS = 2
     }
 
     private data class EncodedSample(
@@ -94,6 +95,7 @@ class RecordingService : Service() {
     private var audioRequired = false
     private var microphoneRequired = false
     private var playbackRequired = false
+    private var audioChannelCount = 1
     private var videoTrack = -1
     private var audioTrack = -1
     private val muxerLock = Any()
@@ -212,6 +214,11 @@ class RecordingService : Service() {
         }
         microphoneRequired = audioMode == "microphone" || audioMode == "both"
         playbackRequired = audioMode == "internal" || audioMode == "both"
+        audioChannelCount = if (playbackRequired && !microphoneRequired) {
+            PLAYBACK_CHANNELS
+        } else {
+            1
+        }
         var playbackFallback = false
         if (playbackRequired && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             if (audioMode == "internal") {
@@ -281,10 +288,17 @@ class RecordingService : Service() {
     }
 
     private fun prepareAudioCapture(activeProjection: MediaProjection) {
-        val audioFormat = MediaFormat.createAudioFormat(AUDIO_MIME, AUDIO_SAMPLE_RATE, 1).apply {
+        val audioFormat = MediaFormat.createAudioFormat(
+            AUDIO_MIME,
+            AUDIO_SAMPLE_RATE,
+            audioChannelCount,
+        ).apply {
             setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
             setInteger(MediaFormat.KEY_BIT_RATE, 128_000)
-            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, AUDIO_FRAME_SAMPLES * 2)
+            setInteger(
+                MediaFormat.KEY_MAX_INPUT_SIZE,
+                AUDIO_FRAME_SAMPLES * audioChannelCount * Short.SIZE_BYTES,
+            )
         }
         audioEncoder = MediaCodec.createEncoderByType(AUDIO_MIME).apply {
             configure(audioFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -332,7 +346,12 @@ class RecordingService : Service() {
             playbackRecorder = AudioRecord.Builder()
                 .setAudioFormat(format)
                 .setAudioPlaybackCaptureConfig(captureConfig)
-                .setBufferSizeInBytes(maxOf(minBufferSize, AUDIO_FRAME_SAMPLES * 4))
+                .setBufferSizeInBytes(
+                    maxOf(
+                        minBufferSize * 2,
+                        AUDIO_FRAME_SAMPLES * PLAYBACK_CHANNELS * Short.SIZE_BYTES * 2,
+                    ),
+                )
                 .build()
                 .also {
                     if (it.state != AudioRecord.STATE_INITIALIZED) {
@@ -355,22 +374,60 @@ class RecordingService : Service() {
         }
         playbackRecorder?.let { recorder ->
             playbackReaderThread = Thread({
-                val stereo = ShortArray(AUDIO_FRAME_SAMPLES * 2)
-                while (recording) {
-                    val read = recorder.read(stereo, 0, stereo.size)
-                    if (read > 1) {
-                        val mono = ShortArray(read / 2) { index ->
-                            (
-                                (stereo[index * 2].toInt() +
-                                    stereo[index * 2 + 1].toInt()) / 2
-                                ).toShort()
+                try {
+                    while (recording) {
+                        val stereo = readPlaybackFrame(recorder) ?: continue
+                        if (!recording || paused) continue
+
+                        val frame = if (microphoneRequired) {
+                            ShortArray(AUDIO_FRAME_SAMPLES) { index ->
+                                (
+                                    (stereo[index * PLAYBACK_CHANNELS].toInt() +
+                                        stereo[index * PLAYBACK_CHANNELS + 1].toInt()) / 2
+                                    ).toShort()
+                            }
+                        } else {
+                            stereo
                         }
-                        offerLatest(playbackFrames, mono)
+                        while (recording && !paused &&
+                            !playbackFrames.offer(frame, 100, TimeUnit.MILLISECONDS)
+                        ) {
+                            // Keep audio in order instead of dropping old samples.
+                        }
+                    }
+                } catch (error: Exception) {
+                    if (recording) {
+                        sendStatus(
+                            "error",
+                            error.message ?: "Falha ao capturar o áudio interno.",
+                        )
+                        android.os.Handler(mainLooper).post {
+                            if (recording) stopRecording()
+                        }
                     }
                 }
             }, "B13FalconPlaybackReader").also { it.start() }
         }
         audioMixerThread = Thread(::mixAudioFrames, "B13FalconAudioMixer").also { it.start() }
+    }
+
+    private fun readPlaybackFrame(recorder: AudioRecord): ShortArray? {
+        val frame = ShortArray(AUDIO_FRAME_SAMPLES * PLAYBACK_CHANNELS)
+        var samplesRead = 0
+        while (samplesRead < frame.size && recording) {
+            val read = recorder.read(
+                frame,
+                samplesRead,
+                frame.size - samplesRead,
+                AudioRecord.READ_BLOCKING,
+            )
+            if (read < 0) {
+                if (!recording) return null
+                throw IOException("Falha ao ler áudio interno (AudioRecord: $read).")
+            }
+            samplesRead += read
+        }
+        return frame.takeIf { samplesRead == frame.size }
     }
 
     private fun offerLatest(queue: ArrayBlockingQueue<ShortArray>, frame: ShortArray) {
@@ -382,6 +439,10 @@ class RecordingService : Service() {
 
     private fun mixAudioFrames() {
         val audioCodec = audioEncoder ?: return
+        if (playbackRequired && !microphoneRequired) {
+            mixPlaybackOnly(audioCodec)
+            return
+        }
         var presentationTimeUs = 0L
         while (recording) {
             if (paused) {
@@ -426,6 +487,52 @@ class RecordingService : Service() {
                 0,
             )
             presentationTimeUs += AUDIO_FRAME_SAMPLES * 1_000_000L / AUDIO_SAMPLE_RATE
+        }
+        val inputIndex = audioCodec.dequeueInputBuffer(10_000)
+        if (inputIndex >= 0) {
+            audioCodec.queueInputBuffer(
+                inputIndex,
+                0,
+                0,
+                presentationTimeUs,
+                MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+            )
+        }
+    }
+
+    private fun mixPlaybackOnly(audioCodec: MediaCodec) {
+        var presentationTimeUs = 0L
+        var pendingFrame: ShortArray? = null
+        while (recording) {
+            if (paused) {
+                playbackFrames.clear()
+                pendingFrame = null
+                TimeUnit.MILLISECONDS.sleep(10)
+                continue
+            }
+            if (pendingFrame == null) {
+                pendingFrame = playbackFrames.poll(10, TimeUnit.MILLISECONDS)
+                if (pendingFrame == null) continue
+            }
+
+            val inputIndex = audioCodec.dequeueInputBuffer(10_000)
+            if (inputIndex < 0) continue
+            val frame = pendingFrame ?: continue
+            val inputBuffer = audioCodec.getInputBuffer(inputIndex)
+                ?.order(java.nio.ByteOrder.LITTLE_ENDIAN) ?: continue
+            inputBuffer.clear()
+            for (sample in frame) {
+                inputBuffer.putShort(sample)
+            }
+            audioCodec.queueInputBuffer(
+                inputIndex,
+                0,
+                frame.size * Short.SIZE_BYTES,
+                presentationTimeUs,
+                0,
+            )
+            presentationTimeUs += AUDIO_FRAME_SAMPLES * 1_000_000L / AUDIO_SAMPLE_RATE
+            pendingFrame = null
         }
         val inputIndex = audioCodec.dequeueInputBuffer(10_000)
         if (inputIndex >= 0) {
