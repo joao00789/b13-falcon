@@ -61,6 +61,12 @@
 - Removidos o fluxo antigo `startRequestedFromFloating`, a ação de início encaminhada à `MainActivity` e chamadas `moveTaskToBack`.
 - Versão elevada para `1.2.2+8`.
 
+### 2026-10-26 — Commit 2: orientação e dimensões da captura
+
+- No toque de gravar, o overlay consulta métricas reais, rotação e orientação da configuração atual e envia `sourceWidth`/`sourceHeight` à Activity transparente.
+- `RecordingService` usa esse snapshot para `auto`; `landscape` mantém o lado maior na largura e a proporção original para o VirtualDisplay/encoder.
+- Versão elevada para `1.2.2+9`.
+
 ## Decisões e limitações conhecidas
 
 - MediaProjection exige consentimento do usuário em cada nova sessão; o overlay não pode reutilizar consentimento anterior.

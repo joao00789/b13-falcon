@@ -25,6 +25,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.util.DisplayMetrics
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -226,6 +227,27 @@ class FloatingControlsService : Service() {
 
     private fun startCaptureFromFloating() {
         val preferences = getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
+        val displayMetrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        val display = windowManager.defaultDisplay
+        @Suppress("DEPRECATION")
+        display.getRealMetrics(displayMetrics)
+        val rotation = display.rotation
+        val isLandscape = when (resources.configuration.orientation) {
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE -> true
+            android.content.res.Configuration.ORIENTATION_PORTRAIT -> false
+            else -> rotation == android.view.Surface.ROTATION_90 ||
+                rotation == android.view.Surface.ROTATION_270
+        }
+        var sourceWidth = displayMetrics.widthPixels
+        var sourceHeight = displayMetrics.heightPixels
+        if (isLandscape && sourceWidth < sourceHeight ||
+            !isLandscape && sourceWidth > sourceHeight
+        ) {
+            val originalWidth = sourceWidth
+            sourceWidth = sourceHeight
+            sourceHeight = originalWidth
+        }
         val intent = Intent(this, CaptureConsentActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra("title", "B13_FALCON_${System.currentTimeMillis()}")
@@ -235,6 +257,8 @@ class FloatingControlsService : Service() {
             putExtra("audioMode", preferences.getString("audioMode", "both"))
             putExtra("codec", preferences.getString("codec", "h264"))
             putExtra("orientation", preferences.getString("orientation", "auto"))
+            putExtra("sourceWidth", sourceWidth)
+            putExtra("sourceHeight", sourceHeight)
         }
         try {
             startActivity(intent)

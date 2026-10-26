@@ -62,6 +62,14 @@ class CaptureConsentActivity : Activity() {
                     intent.getStringExtra("orientation")
                         ?: preferences.getString("orientation", "auto"),
                 )
+                putExtra(
+                    "sourceWidth",
+                    intent.getIntExtra("sourceWidth", 0),
+                )
+                putExtra(
+                    "sourceHeight",
+                    intent.getIntExtra("sourceHeight", 0),
+                )
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

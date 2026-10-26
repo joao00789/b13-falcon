@@ -205,9 +205,20 @@ class RecordingService : Service() {
         val displayMetrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(displayMetrics)
-        var sourceWidth = displayMetrics.widthPixels
-        var sourceHeight = displayMetrics.heightPixels
-        when (intent.getStringExtra("orientation") ?: "auto") {
+        val requestedOrientation = intent.getStringExtra("orientation") ?: "auto"
+        var sourceWidth = if (requestedOrientation == "auto") {
+            intent.getIntExtra("sourceWidth", 0).takeIf { it > 0 }
+                ?: displayMetrics.widthPixels
+        } else {
+            displayMetrics.widthPixels
+        }
+        var sourceHeight = if (requestedOrientation == "auto") {
+            intent.getIntExtra("sourceHeight", 0).takeIf { it > 0 }
+                ?: displayMetrics.heightPixels
+        } else {
+            displayMetrics.heightPixels
+        }
+        when (requestedOrientation) {
             "portrait" -> if (sourceWidth > sourceHeight) {
                 val oldWidth = sourceWidth
                 sourceWidth = sourceHeight
