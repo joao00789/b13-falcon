@@ -10,7 +10,6 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
-import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -42,7 +41,7 @@ class CameraOverlayService : LifecycleService() {
     private var config = CameraOverlayConfig.fromJson("{}")
     private var cameraProvider: ProcessCameraProvider? = null
     private var previewView: PreviewView? = null
-    private var previewFrame: FrameLayout? = null
+    private var previewFrame: CameraFrameView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var cameraUseCase: Preview? = null
     private var overlayAdded = false
@@ -151,8 +150,7 @@ class CameraOverlayService : LifecycleService() {
             scaleType = PreviewView.ScaleType.FILL_CENTER
             setBackgroundColor(Color.TRANSPARENT)
         }
-        val frame = FrameLayout(this).apply {
-            clipToOutline = true
+        val frame = CameraFrameView(this).apply {
             elevation = dp(12).toFloat()
             addView(
                 view,
@@ -192,16 +190,7 @@ class CameraOverlayService : LifecycleService() {
 
     private fun applyFrameStyle() {
         val frame = previewFrame ?: return
-        frame.background = GradientDrawable().apply {
-            setColor(Color.argb(188, 8, 11, 18))
-            when (config.shape) {
-                "circle" -> shape = GradientDrawable.OVAL
-                "square" -> cornerRadius = 0f
-                else -> cornerRadius = dp(config.cornerRadiusDp).toFloat()
-            }
-            setStroke(dp(2), config.borderColor)
-        }
-        frame.clipToOutline = true
+        frame.applyConfig(config)
     }
 
     private fun createDragListener(

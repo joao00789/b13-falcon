@@ -30,6 +30,180 @@ class SettingsPage extends StatelessWidget {
   final int sourceWidth;
   final int sourceHeight;
 
+  Future<void> _selectCameraBorderColor(BuildContext context) async {
+    var selected = Color(settings.cameraOverlay.borderColor & 0xFFFFFFFF);
+    var hsv = HSVColor.fromColor(selected);
+    final hexController = TextEditingController(
+      text: selected.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase(),
+    );
+    try {
+      final result = await showDialog<Color>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Cor da borda'),
+            content: SizedBox(
+              width: 360,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: selected,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outline,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: hexController,
+                      maxLength: 8,
+                      decoration: const InputDecoration(
+                        labelText: 'ARGB hexadecimal',
+                        prefixText: '#',
+                        helperText: 'Use 8 dígitos, ou 6 para cor opaca.',
+                      ),
+                      onChanged: (value) {
+                        final digits = value.replaceAll('#', '').trim();
+                        if (digits.length != 6 && digits.length != 8) return;
+                        final parsed = int.tryParse(digits, radix: 16);
+                        if (parsed == null) return;
+                        final argb = digits.length == 6
+                            ? (0xFF000000 | parsed)
+                            : parsed;
+                        setDialogState(() {
+                          selected = Color(argb);
+                          hsv = HSVColor.fromColor(selected);
+                        });
+                      },
+                    ),
+                    _hsvSlider(
+                      label: 'Matiz',
+                      value: hsv.hue,
+                      max: 360,
+                      divisions: 360,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          hsv = hsv.withHue(value);
+                          selected = hsv.toColor();
+                          hexController.text = selected
+                              .toARGB32()
+                              .toRadixString(16)
+                              .padLeft(8, '0')
+                              .toUpperCase();
+                        });
+                      },
+                    ),
+                    _hsvSlider(
+                      label: 'Saturação',
+                      value: hsv.saturation,
+                      max: 1,
+                      divisions: 100,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          hsv = hsv.withSaturation(value);
+                          selected = hsv.toColor();
+                          hexController.text = selected
+                              .toARGB32()
+                              .toRadixString(16)
+                              .padLeft(8, '0')
+                              .toUpperCase();
+                        });
+                      },
+                    ),
+                    _hsvSlider(
+                      label: 'Brilho',
+                      value: hsv.value,
+                      max: 1,
+                      divisions: 100,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          hsv = hsv.withValue(value);
+                          selected = hsv.toColor();
+                          hexController.text = selected
+                              .toARGB32()
+                              .toRadixString(16)
+                              .padLeft(8, '0')
+                              .toUpperCase();
+                        });
+                      },
+                    ),
+                    _hsvSlider(
+                      label: 'Opacidade',
+                      value: hsv.alpha,
+                      max: 1,
+                      divisions: 100,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          hsv = hsv.withAlpha(value);
+                          selected = hsv.toColor();
+                          hexController.text = selected
+                              .toARGB32()
+                              .toRadixString(16)
+                              .padLeft(8, '0')
+                              .toUpperCase();
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, selected),
+                child: const Text('Aplicar'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (result != null) {
+        onChanged(
+          settings.copyWith(
+            cameraOverlay: settings.cameraOverlay.copyWith(
+              borderColor: result.toARGB32().toSigned(32),
+            ),
+          ),
+        );
+      }
+    } finally {
+      hexController.dispose();
+    }
+  }
+
+  Widget _hsvSlider({
+    required String label,
+    required double value,
+    required double max,
+    required int divisions,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label),
+        Slider(
+          min: 0,
+          max: max,
+          divisions: divisions,
+          value: value.clamp(0, max).toDouble(),
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -351,6 +525,39 @@ class SettingsPage extends StatelessWidget {
                                               : Colors.white,
                                         )
                                       : null,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => _selectCameraBorderColor(context),
+                      icon: const Icon(Icons.palette_outlined),
+                      label: const Text('Escolher qualquer cor'),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Estilo da borda', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      children:
+                          const [
+                            ('solid', 'Sólida'),
+                            ('dashed', 'Tracejada'),
+                            ('double', 'Dupla'),
+                            ('gradient', 'Gradiente'),
+                            ('glow', 'Brilho'),
+                          ].map((style) {
+                            final (value, label) = style;
+                            return ChoiceChip(
+                              label: Text(label),
+                              selected:
+                                  settings.cameraOverlay.borderStyle == value,
+                              onSelected: (_) => onChanged(
+                                settings.copyWith(
+                                  cameraOverlay: settings.cameraOverlay
+                                      .copyWith(borderStyle: value),
                                 ),
                               ),
                             );

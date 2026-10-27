@@ -3,7 +3,7 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual em desenvolvimento: `1.2.10+22`; branch `main`; `v1.2.6` é a última release publicada.
+- Versão atual em desenvolvimento: `1.2.11+23`; branch `main`; `v1.2.6` é a última release publicada.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
 - `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos, configuração do overlay e consentimento MediaProjection quando a gravação começa no app.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
@@ -45,10 +45,17 @@
 - Biblioteca MediaStore com listar, abrir via reprodutor externo e excluir gravações.
 - Preferências persistidas localmente em `SharedPreferences`.
 - Câmera frontal com prévia CameraX em janela flutuante e compositor antigo preservado como alternativa `baked`; a inclusão da janela no vídeo requer validação em aparelho.
+- Bordas da facecam personalizáveis entre estilos sólido, tracejado, duplo, gradiente e brilho; a cor aceita ajuste HSV, alfa e hexadecimal ARGB.
 - Abas inferiores Vídeos, Capturas, Ajustes e Ajuda; as notificações oferecem Iniciar quando ocioso e Pausar/Retomar e Pincel durante a gravação.
 - Lucide SVGs e licença ISC em `assets/icons/lucide/`; drawables vetoriais Android equivalentes em `android/app/src/main/res/drawable/`.
 
 ## Changelog (cronológico)
+
+### 2026-10-27 — Personalização de cor e borda da facecam
+
+- Adicionados controles HSV e campo hexadecimal ARGB para personalizar a cor da borda, incluindo matiz, saturação, brilho e opacidade.
+- Implementados os estilos sólido, tracejado, duplo, gradiente e brilho na moldura nativa da prévia CameraX.
+- Atualizada a versão para `1.2.11+23`; `dart format`, `flutter analyze` e `flutter test` aprovados. A compilação Kotlin e a validação em aparelho seguem pendentes por falta do Gradle Wrapper/SDK local.
 
 ### 2026-10-27 — Serviço de prévia CameraX
 
