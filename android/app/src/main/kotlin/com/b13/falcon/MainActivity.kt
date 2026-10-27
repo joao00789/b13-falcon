@@ -202,6 +202,8 @@ class MainActivity : FlutterActivity() {
             .coerceIn(0.0, 1.0)
         val floatingLogoSizeDp = (call.argument<Int>("floatingLogoSizeDp") ?: 56)
             .coerceIn(32, 96)
+        val requestedOrientation = call.argument<String>("orientation") ?: "auto"
+        val (sourceWidth, sourceHeight) = currentDisplaySizeForOrientation(requestedOrientation)
         pendingParams = mapOf(
             "title" to title,
             "resolution" to resolution,
@@ -212,9 +214,11 @@ class MainActivity : FlutterActivity() {
             "floatingLogoOpacity" to floatingLogoOpacity,
             "floatingLogoSizeDp" to floatingLogoSizeDp,
             "codec" to (call.argument<String>("codec") ?: "h264"),
-            "orientation" to (call.argument<String>("orientation") ?: "auto"),
+            "orientation" to requestedOrientation,
             "bitratePreset" to (call.argument<String>("bitratePreset") ?: "custom"),
             "cameraConfigJson" to cameraConfigFor(call),
+            "sourceWidth" to sourceWidth,
+            "sourceHeight" to sourceHeight,
         )
         persistRecordingParams(pendingParams!!)
         val cameraConfig = CameraOverlayConfig.fromJson(
@@ -275,6 +279,40 @@ class MainActivity : FlutterActivity() {
 
     private fun isCameraEnabled(cameraConfigJson: String): Boolean =
         JSONObject(cameraConfigJson).optBoolean("enabled", false)
+
+    private fun currentDisplaySizeForOrientation(requestedOrientation: String): Pair<Int, Int> {
+        val metrics = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION")
+        val display = (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay
+        @Suppress("DEPRECATION")
+        display.getRealMetrics(metrics)
+        var sourceWidth = metrics.widthPixels
+        var sourceHeight = metrics.heightPixels
+        @Suppress("DEPRECATION")
+        val rotation = display.rotation
+        val isLandscape = when (resources.configuration.orientation) {
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE -> true
+            android.content.res.Configuration.ORIENTATION_PORTRAIT -> false
+            else -> rotation == android.view.Surface.ROTATION_90 ||
+                rotation == android.view.Surface.ROTATION_270
+        }
+        if (requestedOrientation == "auto") {
+            if (isLandscape && sourceWidth < sourceHeight || !isLandscape && sourceWidth > sourceHeight) {
+                val originalWidth = sourceWidth
+                sourceWidth = sourceHeight
+                sourceHeight = originalWidth
+            }
+            return sourceWidth to sourceHeight
+        }
+        if (requestedOrientation == "portrait" && sourceWidth > sourceHeight ||
+            requestedOrientation == "landscape" && sourceHeight > sourceWidth
+        ) {
+            val originalWidth = sourceWidth
+            sourceWidth = sourceHeight
+            sourceHeight = originalWidth
+        }
+        return sourceWidth to sourceHeight
+    }
 
     private fun handleCameraConfig(
         call: MethodCall,

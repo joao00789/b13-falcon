@@ -3,7 +3,7 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual em desenvolvimento: `1.2.11+23`; branch `main`; `v1.2.6` é a última release publicada.
+- Versão atual em desenvolvimento: `1.2.12+24`; branch `main`; `v1.2.6` é a última release publicada.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
 - `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos, configuração do overlay e consentimento MediaProjection quando a gravação começa no app.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
@@ -45,11 +45,18 @@
 - Biblioteca MediaStore com listar, abrir via reprodutor externo e excluir gravações.
 - Preferências persistidas localmente em `SharedPreferences`.
 - Câmera frontal com prévia CameraX em janela flutuante e compositor antigo preservado como alternativa `baked`; a inclusão da janela no vídeo requer validação em aparelho.
+- O fluxo iniciado pelo flutuante inicia a prévia da câmera após a solicitação de notificações; gravações iniciadas na tela inicial enviam dimensões reais do display ao serviço nativo.
 - Bordas da facecam personalizáveis entre estilos sólido, tracejado, duplo, gradiente e brilho; a cor aceita ajuste HSV, alfa e hexadecimal ARGB.
 - Abas inferiores Vídeos, Capturas, Ajustes e Ajuda; as notificações oferecem Iniciar quando ocioso e Pausar/Retomar e Pincel durante a gravação.
 - Lucide SVGs e licença ISC em `assets/icons/lucide/`; drawables vetoriais Android equivalentes em `android/app/src/main/res/drawable/`.
 
 ## Changelog (cronológico)
+
+### 2026-10-27 — Corrige inicialização da facecam pelo flutuante
+
+- Corrigido o fluxo de captura iniciado pelo controle flutuante: após a resposta à permissão de notificações, a prévia CameraX também é iniciada antes do consentimento de captura.
+- Corrigido o fluxo iniciado pela tela inicial para enviar ao `RecordingService` as dimensões físicas do display alinhadas à orientação solicitada, evitando dimensões padrão que podiam inverter a gravação.
+- Atualizada a versão para `1.2.12+24`; `dart format`, `flutter analyze` e `flutter test` aprovados. Build Android e validação visual/captura em aparelho permanecem pendentes por ausência de Android SDK, Gradle Wrapper e dispositivo Android neste ambiente.
 
 ### 2026-10-27 — Personalização de cor e borda da facecam
 

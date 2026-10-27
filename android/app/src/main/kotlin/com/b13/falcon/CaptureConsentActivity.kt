@@ -25,6 +25,10 @@ class CaptureConsentActivity : Activity() {
             )
             return
         }
+        continueCaptureSetup()
+    }
+
+    private fun continueCaptureSetup() {
         startCameraPreviewIfEnabled()
         requestCaptureConsent()
     }
@@ -67,7 +71,7 @@ class CaptureConsentActivity : Activity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_NOTIFICATIONS) requestCaptureConsent()
+        if (requestCode == REQUEST_NOTIFICATIONS) continueCaptureSetup()
     }
 
     @Deprecated("Deprecated in Android")
