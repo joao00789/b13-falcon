@@ -51,6 +51,8 @@ class CaptureConsentActivity : Activity() {
 
         if (resultCode == RESULT_OK && data != null) {
             val preferences = getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
+            val cameraConfigJson = intent.getStringExtra("cameraConfigJson")
+                ?: CameraOverlayConfig.loadFromPreferences(preferences)
             val serviceIntent = Intent(this, RecordingService::class.java).apply {
                 action = RecordingService.ACTION_START
                 putExtra(RecordingService.EXTRA_RESULT_CODE, resultCode)
@@ -95,32 +97,7 @@ class CaptureConsentActivity : Activity() {
                     "sourceHeight",
                     intent.getIntExtra("sourceHeight", 0),
                 )
-                putExtra(
-                    "frontCameraEnabled",
-                    intent.getBooleanExtra(
-                        "frontCameraEnabled",
-                        preferences.getBoolean("frontCameraEnabled", false),
-                    ),
-                )
-                putExtra(
-                    "cameraShape",
-                    intent.getStringExtra("cameraShape")
-                        ?: preferences.getString("cameraShape", "circle"),
-                )
-                putExtra(
-                    "cameraBorderColor",
-                    intent.getIntExtra(
-                        "cameraBorderColor",
-                        preferences.getInt("cameraBorderColor", android.graphics.Color.WHITE),
-                    ),
-                )
-                putExtra(
-                    "cameraBorderWidthDp",
-                    intent.getIntExtra(
-                        "cameraBorderWidthDp",
-                        preferences.getInt("cameraBorderWidthDp", 3),
-                    ),
-                )
+                putExtra("cameraConfigJson", cameraConfigJson)
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

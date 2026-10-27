@@ -1,6 +1,7 @@
 import 'package:b13_falcon/app.dart';
 import 'package:b13_falcon/core/theme/app_theme_data.dart';
 import 'package:b13_falcon/data/models/app_settings.dart';
+import 'package:b13_falcon/data/models/camera_overlay_settings.dart';
 import 'package:b13_falcon/features/settings/settings_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,28 +51,80 @@ void main() {
 
   test('camera overlay settings survive serialization safely', () {
     const settings = AppSettings(
-      frontCameraEnabled: true,
-      cameraShape: 'rounded',
-      cameraBorderColor: 0xFF168AAD - 0x100000000,
-      cameraBorderWidthDp: 7,
+      cameraOverlay: CameraOverlaySettings(
+        enabled: true,
+        shape: 'rounded',
+        borderColor: 0xFF168AAD - 0x100000000,
+        borderWidthDp: 7,
+        sizeDp: 174,
+        nameTagText: 'Canal Falcon',
+      ),
     );
     final restored = AppSettings.fromJson(settings.toJson());
 
-    expect(restored.frontCameraEnabled, isTrue);
-    expect(restored.cameraShape, 'rounded');
-    expect(restored.cameraBorderColor, settings.cameraBorderColor);
-    expect(restored.cameraBorderWidthDp, 7);
+    expect(restored.cameraOverlay.enabled, isTrue);
+    expect(restored.cameraOverlay.shape, 'rounded');
+    expect(
+      restored.cameraOverlay.borderColor,
+      settings.cameraOverlay.borderColor,
+    );
+    expect(restored.cameraOverlay.borderWidthDp, 7);
+    expect(restored.cameraOverlay.sizeDp, 174);
+    expect(restored.cameraOverlay.nameTagText, 'Canal Falcon');
 
     final recovered = AppSettings.fromJson({
-      'cameraShape': 'invalid',
-      'cameraBorderColor': 0xFF123456,
-      'cameraBorderWidthDp': 100,
+      'cameraConfigJson': {
+        'enabled': true,
+        'shape': 'invalid',
+        'sizeDp': 500,
+        'border': {'color': 0xFF123456, 'style': 'invalid', 'widthDp': 100},
+        'nameTag': {'text': List.filled(25, 'A').join()},
+        'position': {'xFraction': -1, 'yFraction': 2},
+      },
       'frontCameraEnabled': 'true',
     });
-    expect(recovered.cameraShape, 'circle');
-    expect(recovered.cameraBorderColor, -1);
-    expect(recovered.cameraBorderWidthDp, 12);
-    expect(recovered.frontCameraEnabled, isFalse);
+    expect(recovered.cameraOverlay.shape, 'circle');
+    expect(recovered.cameraOverlay.borderColor, 0xFF123456 - 0x100000000);
+    expect(recovered.cameraOverlay.borderStyle, 'solid');
+    expect(recovered.cameraOverlay.borderWidthDp, 16);
+    expect(recovered.cameraOverlay.sizeDp, 260);
+    expect(recovered.cameraOverlay.nameTagText, List.filled(24, 'A').join());
+    expect(recovered.cameraOverlay.xFraction, 0);
+    expect(recovered.cameraOverlay.yFraction, 1);
+    expect(recovered.cameraOverlay.enabled, isTrue);
+  });
+
+  test('legacy camera settings migrate without losing user choices', () {
+    final settings = AppSettings.fromJson({
+      'frontCameraEnabled': true,
+      'cameraShape': 'rounded',
+      'cameraBorderColor': 0xFF123456,
+      'cameraBorderWidthDp': 7,
+      'cameraPreviewSizeDp': 174,
+    });
+
+    expect(settings.cameraOverlay.enabled, isTrue);
+    expect(settings.cameraOverlay.shape, 'rounded');
+    expect(settings.cameraOverlay.borderColor, 0xFF123456 - 0x100000000);
+    expect(settings.cameraOverlay.borderWidthDp, 7);
+    expect(settings.cameraOverlay.sizeDp, 174);
+    expect(settings.toJson(), contains('cameraConfigJson'));
+    expect(settings.toJson(), isNot(contains('frontCameraEnabled')));
+  });
+
+  test('camera config can be serialized as the native bridge JSON string', () {
+    const camera = CameraOverlaySettings(
+      enabled: true,
+      shape: 'square',
+      borderStyle: 'gradient',
+      nameTagText: 'B13 FALCON',
+    );
+    final restored = CameraOverlaySettings.fromJson(camera.configJson);
+
+    expect(restored.enabled, isTrue);
+    expect(restored.shape, 'square');
+    expect(restored.borderStyle, 'gradient');
+    expect(restored.nameTagText, 'B13 FALCON');
   });
 
   testWidgets('B13 FALCON app loads', (tester) async {

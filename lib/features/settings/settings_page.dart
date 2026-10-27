@@ -251,7 +251,9 @@ class SettingsPage extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     'Inclua sua câmera no vídeo gravado. A composição usa o '
-                    'encoder do aparelho e pode reduzir o FPS em modelos mais fracos.',
+                    'encoder do aparelho e também mostra uma prévia flutuante '
+                    'sobre outros apps; exige permissão de sobreposição e pode '
+                    'reduzir o FPS em modelos mais fracos.',
                     style: theme.textTheme.bodySmall,
                   ),
                   const SizedBox(height: 10),
@@ -261,11 +263,16 @@ class SettingsPage extends StatelessWidget {
                     subtitle: const Text(
                       'A imagem será incorporada ao MP4, não apenas exibida na tela.',
                     ),
-                    value: settings.frontCameraEnabled,
-                    onChanged: (value) =>
-                        onChanged(settings.copyWith(frontCameraEnabled: value)),
+                    value: settings.cameraOverlay.enabled,
+                    onChanged: (value) => onChanged(
+                      settings.copyWith(
+                        cameraOverlay: settings.cameraOverlay.copyWith(
+                          enabled: value,
+                        ),
+                      ),
+                    ),
                   ),
-                  if (settings.frontCameraEnabled) ...[
+                  if (settings.cameraOverlay.enabled) ...[
                     const SizedBox(height: 4),
                     Text(
                       'Formato da câmera',
@@ -282,9 +289,12 @@ class SettingsPage extends StatelessWidget {
                             final (value, label) = shape;
                             return ChoiceChip(
                               label: Text(label),
-                              selected: settings.cameraShape == value,
+                              selected: settings.cameraOverlay.shape == value,
                               onSelected: (_) => onChanged(
-                                settings.copyWith(cameraShape: value),
+                                settings.copyWith(
+                                  cameraOverlay: settings.cameraOverlay
+                                      .copyWith(shape: value),
+                                ),
                               ),
                             );
                           }).toList(),
@@ -305,13 +315,16 @@ class SettingsPage extends StatelessWidget {
                           ].map((option) {
                             final (value, label) = option;
                             final selected =
-                                settings.cameraBorderColor == value;
+                                settings.cameraOverlay.borderColor == value;
                             return Tooltip(
                               message: label,
                               child: InkWell(
                                 customBorder: const CircleBorder(),
                                 onTap: () => onChanged(
-                                  settings.copyWith(cameraBorderColor: value),
+                                  settings.copyWith(
+                                    cameraOverlay: settings.cameraOverlay
+                                        .copyWith(borderColor: value),
+                                  ),
                                 ),
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 160),
@@ -352,17 +365,47 @@ class SettingsPage extends StatelessWidget {
                             style: theme.textTheme.titleSmall,
                           ),
                         ),
-                        Text('${settings.cameraBorderWidthDp} dp'),
+                        Text('${settings.cameraOverlay.borderWidthDp} dp'),
                       ],
                     ),
                     Slider(
                       min: 0,
                       max: 12,
                       divisions: 12,
-                      value: settings.cameraBorderWidthDp.toDouble(),
-                      label: '${settings.cameraBorderWidthDp} dp',
+                      value: settings.cameraOverlay.borderWidthDp.toDouble(),
+                      label: '${settings.cameraOverlay.borderWidthDp} dp',
                       onChanged: (value) => onChanged(
-                        settings.copyWith(cameraBorderWidthDp: value.round()),
+                        settings.copyWith(
+                          cameraOverlay: settings.cameraOverlay.copyWith(
+                            borderWidthDp: value.round(),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Tamanho da prévia flutuante',
+                            style: theme.textTheme.titleSmall,
+                          ),
+                        ),
+                        Text('${settings.cameraOverlay.sizeDp} dp'),
+                      ],
+                    ),
+                    Slider(
+                      min: 80,
+                      max: 260,
+                      divisions: 18,
+                      value: settings.cameraOverlay.sizeDp.toDouble(),
+                      label: '${settings.cameraOverlay.sizeDp} dp',
+                      onChanged: (value) => onChanged(
+                        settings.copyWith(
+                          cameraOverlay: settings.cameraOverlay.copyWith(
+                            sizeDp: value.round(),
+                          ),
+                        ),
                       ),
                     ),
                   ],

@@ -61,10 +61,7 @@ class RecordingNativeBridge {
     required String codec,
     required String orientation,
     required String bitratePreset,
-    required bool frontCameraEnabled,
-    required String cameraShape,
-    required int cameraBorderColor,
-    required int cameraBorderWidthDp,
+    required String cameraConfigJson,
   }) async {
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
@@ -81,10 +78,7 @@ class RecordingNativeBridge {
           'codec': codec,
           'orientation': orientation,
           'bitratePreset': bitratePreset,
-          'frontCameraEnabled': frontCameraEnabled,
-          'cameraShape': cameraShape,
-          'cameraBorderColor': cameraBorderColor,
-          'cameraBorderWidthDp': cameraBorderWidthDp,
+          'cameraConfigJson': cameraConfigJson,
         },
       );
       return Map<String, dynamic>.from(result ?? const <dynamic, dynamic>{});
@@ -201,10 +195,7 @@ class RecordingNativeBridge {
     required String codec,
     required String orientation,
     required String bitratePreset,
-    required bool frontCameraEnabled,
-    required String cameraShape,
-    required int cameraBorderColor,
-    required int cameraBorderWidthDp,
+    required String cameraConfigJson,
   }) async {
     return await _channel.invokeMethod<bool>('setFloatingControls', {
           'enabled': enabled,
@@ -217,11 +208,20 @@ class RecordingNativeBridge {
           'codec': codec,
           'orientation': orientation,
           'bitratePreset': bitratePreset,
-          'frontCameraEnabled': frontCameraEnabled,
-          'cameraShape': cameraShape,
-          'cameraBorderColor': cameraBorderColor,
-          'cameraBorderWidthDp': cameraBorderWidthDp,
+          'cameraConfigJson': cameraConfigJson,
         }) ??
         false;
+  }
+
+  Future<void> saveCameraConfig(String cameraConfigJson) async {
+    await _channel.invokeMethod<void>('saveCameraConfig', {
+      'cameraConfigJson': cameraConfigJson,
+    });
+  }
+
+  Future<void> updateCameraLive(String cameraConfigJson) async {
+    await _channel.invokeMethod<void>('updateCameraLive', {
+      'cameraConfigJson': cameraConfigJson,
+    });
   }
 }

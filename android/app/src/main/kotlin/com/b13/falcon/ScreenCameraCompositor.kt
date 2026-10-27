@@ -100,10 +100,10 @@ internal class ScreenCameraCompositor(
             1f, 1f,
         )
         private val TEXTURE_COORDINATES = floatArrayOf(
-            0f, 1f,
-            1f, 1f,
             0f, 0f,
             1f, 0f,
+            0f, 1f,
+            1f, 1f,
         )
     }
 
@@ -120,6 +120,8 @@ internal class ScreenCameraCompositor(
     private var eglDisplay = EGL14.EGL_NO_DISPLAY
     private var eglContext = EGL14.EGL_NO_CONTEXT
     private var eglSurface = EGL14.EGL_NO_SURFACE
+    private var eglConfig: android.opengl.EGLConfig? = null
+    private var previewEglSurface = EGL14.EGL_NO_SURFACE
     private var screenTextureId = 0
     private var cameraTextureId = 0
     private var screenTexture: SurfaceTexture? = null
@@ -175,6 +177,29 @@ internal class ScreenCameraCompositor(
         handler.post { paused = value }
     }
 
+    fun setPreviewSurface(surface: Surface?) {
+        handler.post {
+            if (released.get()) return@post
+            if (previewEglSurface != EGL14.EGL_NO_SURFACE) {
+                EGL14.eglDestroySurface(eglDisplay, previewEglSurface)
+                previewEglSurface = EGL14.EGL_NO_SURFACE
+            }
+            if (surface != null && surface.isValid) {
+                val config = eglConfig ?: return@post
+                previewEglSurface = EGL14.eglCreateWindowSurface(
+                    eglDisplay,
+                    config,
+                    surface,
+                    intArrayOf(EGL14.EGL_NONE),
+                    0,
+                )
+                if (previewEglSurface == EGL14.EGL_NO_SURFACE) {
+                    onFailure("Não foi possível abrir a prévia flutuante da câmera.")
+                }
+            }
+        }
+    }
+
     fun release() {
         if (!released.compareAndSet(false, true)) return
         val done = CountDownLatch(1)
@@ -210,6 +235,9 @@ internal class ScreenCameraCompositor(
                         if (screenProgram != 0) GLES20.glDeleteProgram(screenProgram)
                         if (cameraProgram != 0) GLES20.glDeleteProgram(cameraProgram)
                     }
+                    if (previewEglSurface != EGL14.EGL_NO_SURFACE) {
+                        EGL14.eglDestroySurface(eglDisplay, previewEglSurface)
+                    }
                     if (eglSurface != EGL14.EGL_NO_SURFACE) {
                         EGL14.eglDestroySurface(eglDisplay, eglSurface)
                     }
@@ -221,6 +249,8 @@ internal class ScreenCameraCompositor(
                 eglDisplay = EGL14.EGL_NO_DISPLAY
                 eglContext = EGL14.EGL_NO_CONTEXT
                 eglSurface = EGL14.EGL_NO_SURFACE
+                previewEglSurface = EGL14.EGL_NO_SURFACE
+                eglConfig = null
                 screenTextureId = 0
                 cameraTextureId = 0
                 screenProgram = 0
@@ -301,6 +331,7 @@ internal class ScreenCameraCompositor(
             surfaceAttributes,
             0,
         )
+        eglConfig = configs[0]
         if (eglContext == EGL14.EGL_NO_CONTEXT ||
             eglSurface == EGL14.EGL_NO_SURFACE ||
             !EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
@@ -340,6 +371,16 @@ internal class ScreenCameraCompositor(
         cameraSurface = Surface(cameraTexture)
         Matrix.setIdentityM(screenTextureMatrix, 0)
         Matrix.setIdentityM(cameraTextureMatrix, 0)
+    }
+
+    private fun applyFrontCameraTransform(matrix: FloatArray) {
+        val base = matrix.copyOf()
+        val corrected = FloatArray(16)
+        Matrix.setIdentityM(corrected, 0)
+        Matrix.scaleM(corrected, 0, -1f, 1f, 1f)
+        Matrix.rotateM(corrected, 0, 180f, 0f, 0f, 1f)
+        Matrix.multiplyMM(corrected, 0, corrected, 0, base, 0)
+        System.arraycopy(corrected, 0, matrix, 0, 16)
     }
 
     private fun startFrontCamera() {
@@ -421,6 +462,7 @@ internal class ScreenCameraCompositor(
                     if (cameraStarted) {
                         cameraTexture?.updateTexImage()
                         cameraTexture?.getTransformMatrix(cameraTextureMatrix)
+                        applyFrontCameraTransform(cameraTextureMatrix)
                     }
                     renderFrame()
                 } catch (error: Exception) {
@@ -457,6 +499,49 @@ internal class ScreenCameraCompositor(
         if (!EGL14.eglSwapBuffers(eglDisplay, eglSurface)) {
             throw IOException("O encoder rejeitou um quadro composto.")
         }
+        if (cameraStarted && previewEglSurface != EGL14.EGL_NO_SURFACE &&
+            EGL14.eglMakeCurrent(
+                eglDisplay,
+                previewEglSurface,
+                previewEglSurface,
+                eglContext,
+            )
+        ) {
+            val dimensions = IntArray(1)
+            EGL14.eglQuerySurface(
+                eglDisplay,
+                previewEglSurface,
+                EGL14.EGL_WIDTH,
+                dimensions,
+                0,
+            )
+            val previewWidth = dimensions[0].coerceAtLeast(1)
+            EGL14.eglQuerySurface(
+                eglDisplay,
+                previewEglSurface,
+                EGL14.EGL_HEIGHT,
+                dimensions,
+                0,
+            )
+            val previewHeight = dimensions[0].coerceAtLeast(1)
+            GLES20.glViewport(0, 0, previewWidth, previewHeight)
+            GLES20.glClearColor(0f, 0f, 0f, 0f)
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+            drawTexture(
+                cameraProgram,
+                cameraTextureId,
+                cameraTextureMatrix,
+                true,
+                previewWidth,
+                previewHeight,
+                1f,
+            )
+            if (!EGL14.eglSwapBuffers(eglDisplay, previewEglSurface)) {
+                EGL14.eglDestroySurface(eglDisplay, previewEglSurface)
+                previewEglSurface = EGL14.EGL_NO_SURFACE
+                onFailure("A prévia flutuante da câmera foi desconectada.")
+            }
+        }
     }
 
     private fun drawTexture(
@@ -464,6 +549,9 @@ internal class ScreenCameraCompositor(
         textureId: Int,
         textureMatrix: FloatArray,
         drawBorder: Boolean,
+        frameWidth: Int = surfaceWidth,
+        frameHeight: Int = surfaceHeight,
+        cameraSizeFraction: Float = 0.27f,
     ) {
         GLES20.glUseProgram(program)
         val position = GLES20.glGetAttribLocation(program, "aPosition")
@@ -501,7 +589,7 @@ internal class ScreenCameraCompositor(
                 android.graphics.Color.blue(borderColor) / 255f,
                 android.graphics.Color.alpha(borderColor) / 255f,
             )
-            val cameraSide = minOf(surfaceWidth, surfaceHeight) * 0.27f
+            val cameraSide = minOf(frameWidth, frameHeight) * cameraSizeFraction
             val borderPixels = borderWidthDp * context.resources.displayMetrics.density
             GLES20.glUniform1f(
                 GLES20.glGetUniformLocation(program, "uBorderWidth"),

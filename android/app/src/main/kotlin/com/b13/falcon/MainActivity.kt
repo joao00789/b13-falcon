@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.Settings
+import org.json.JSONObject
 import android.content.IntentFilter
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -77,6 +78,7 @@ class MainActivity : FlutterActivity() {
                 "setFloatingLogoOpacity" -> handleFloatingLogoOpacity(call, result)
                 "setFloatingLogoSize" -> handleFloatingLogoSize(call, result)
                 "setFloatingControls" -> handleFloatingControls(call, result)
+                "saveCameraConfig", "updateCameraLive" -> handleCameraConfig(call, result)
                 "getVideoCapabilities" -> handleGetVideoCapabilities(result)
                 "requestOverlayPermission" -> handleOverlayPermission(result)
                 "requestCameraPermission" -> handleCameraPermission(result)
@@ -156,7 +158,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun prepareStartRecording(call: MethodCall, result: MethodChannel.Result) {
-        if (call.argument<Boolean>("frontCameraEnabled") == true &&
+        if (isCameraEnabled(cameraConfigFor(call)) &&
             checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
         ) {
             pendingAudioCall = call
@@ -208,10 +210,7 @@ class MainActivity : FlutterActivity() {
             "codec" to (call.argument<String>("codec") ?: "h264"),
             "orientation" to (call.argument<String>("orientation") ?: "auto"),
             "bitratePreset" to (call.argument<String>("bitratePreset") ?: "custom"),
-            "frontCameraEnabled" to (call.argument<Boolean>("frontCameraEnabled") ?: false),
-            "cameraShape" to (call.argument<String>("cameraShape") ?: "circle"),
-            "cameraBorderColor" to (call.argument<Int>("cameraBorderColor") ?: android.graphics.Color.WHITE),
-            "cameraBorderWidthDp" to (call.argument<Int>("cameraBorderWidthDp") ?: 3).coerceIn(0, 12),
+            "cameraConfigJson" to cameraConfigFor(call),
         )
         persistRecordingParams(pendingParams!!)
 
@@ -239,12 +238,37 @@ class MainActivity : FlutterActivity() {
             .putString("codec", params["codec"] as? String ?: "h264")
             .putString("orientation", params["orientation"] as? String ?: "auto")
             .putString("bitratePreset", params["bitratePreset"] as? String ?: "custom")
-            .putBoolean("frontCameraEnabled", params["frontCameraEnabled"] as? Boolean ?: false)
-            .putString("cameraShape", params["cameraShape"] as? String ?: "circle")
-            .putInt("cameraBorderColor", params["cameraBorderColor"] as? Int ?: android.graphics.Color.WHITE)
-            .putInt("cameraBorderWidthDp", params["cameraBorderWidthDp"] as? Int ?: 3)
+            .putString("cameraConfigJson", params["cameraConfigJson"] as? String ?: "{}")
             .apply()
         }
+
+    private fun cameraConfigFor(call: MethodCall): String =
+        call.argument<String>("cameraConfigJson")
+            ?: CameraOverlayConfig.loadFromPreferences(
+                getSharedPreferences("b13_falcon_recording", MODE_PRIVATE),
+            )
+
+    private fun isCameraEnabled(cameraConfigJson: String): Boolean =
+        JSONObject(cameraConfigJson).optBoolean("enabled", false)
+
+    private fun handleCameraConfig(call: MethodCall, result: MethodChannel.Result) {
+        val cameraConfigJson = call.argument<String>("cameraConfigJson")
+        if (cameraConfigJson == null) {
+            result.error("INVALID_CAMERA_CONFIG", "A configuração da câmera está ausente.", null)
+            return
+        }
+        try {
+            CameraOverlayConfig.fromJson(cameraConfigJson)
+        } catch (error: org.json.JSONException) {
+            result.error("INVALID_CAMERA_CONFIG", "A configuração da câmera não é um JSON válido.", null)
+            return
+        }
+        getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
+            .edit()
+            .putString("cameraConfigJson", cameraConfigJson)
+            .apply()
+        result.success(null)
+    }
 
     override fun onDestroy() {
         if (statusReceiverRegistered) {
@@ -472,10 +496,7 @@ class MainActivity : FlutterActivity() {
             "codec" to (call.argument<String>("codec") ?: "h264"),
             "orientation" to (call.argument<String>("orientation") ?: "auto"),
             "bitratePreset" to (call.argument<String>("bitratePreset") ?: "custom"),
-            "frontCameraEnabled" to (call.argument<Boolean>("frontCameraEnabled") ?: false),
-            "cameraShape" to (call.argument<String>("cameraShape") ?: "circle"),
-            "cameraBorderColor" to (call.argument<Int>("cameraBorderColor") ?: android.graphics.Color.WHITE),
-            "cameraBorderWidthDp" to (call.argument<Int>("cameraBorderWidthDp") ?: 3).coerceIn(0, 12),
+            "cameraConfigJson" to cameraConfigFor(call),
         )
         persistRecordingParams(params)
         if (!enabled) {

@@ -10,6 +10,9 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.PixelFormat
+import android.graphics.SurfaceTexture
+import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.AudioAttributes
@@ -28,10 +31,16 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.IBinder
+import android.os.Looper
 import android.provider.MediaStore
 import android.util.DisplayMetrics
+import android.view.Gravity
+import android.view.MotionEvent
 import android.view.Surface
+import android.view.TextureView
 import android.view.WindowManager
+import android.widget.FrameLayout
+import android.provider.Settings
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -124,11 +133,12 @@ class RecordingService : Service() {
     private var videoMime = VIDEO_MIME
     private var outputTitle = "B13_FALCON"
     private var videoCompositor: ScreenCameraCompositor? = null
+    private var cameraPreviewView: FrameLayout? = null
+    private var cameraPreviewSurface: Surface? = null
+    private lateinit var windowManager: WindowManager
     private var frontCameraEnabled = false
     @Volatile private var cameraFailureMessage: String? = null
-    private var cameraBorderColor = android.graphics.Color.WHITE
-    private var cameraBorderWidthDp = 3
-    private var cameraShape = "circle"
+    private var cameraConfig = CameraOverlayConfig.fromJson("{}")
     private var drainThread: Thread? = null
     private var audioDrainThread: Thread? = null
     private var microphoneReaderThread: Thread? = null
@@ -160,6 +170,7 @@ class RecordingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
     }
 
@@ -174,12 +185,12 @@ class RecordingService : Service() {
                     val audioMode = intent.getStringExtra("audioMode")
                     val needsMicrophone =
                         audioMode == "both" || audioMode == "microphone" || audioMode == "Microfone"
-                    startForegroundCompat(
-                        buildNotification("Preparando gravação"),
-                        needsMicrophone,
-                        intent.getBooleanExtra("frontCameraEnabled", false),
-                    )
                     try {
+                        startForegroundCompat(
+                            buildNotification("Preparando gravação"),
+                            needsMicrophone,
+                            cameraConfigFor(intent).enabled,
+                        )
                         startRecording(intent)
                     } catch (error: Exception) {
                         stopRecording(
@@ -303,15 +314,8 @@ class RecordingService : Service() {
         displayHeight = ((sourceHeight * scale).toInt() / 2) * 2
         frameRate = (intent.getIntExtra("fps", 30)).coerceIn(15, 90)
         bitRate = (intent.getIntExtra("bitrateKbps", 16000).coerceIn(4_000, 80_000)) * 1000
-        frontCameraEnabled = intent.getBooleanExtra("frontCameraEnabled", false)
-        cameraBorderColor = intent.getIntExtra(
-            "cameraBorderColor",
-            android.graphics.Color.WHITE,
-        )
-        cameraBorderWidthDp = intent.getIntExtra("cameraBorderWidthDp", 3).coerceIn(0, 12)
-        cameraShape = intent.getStringExtra("cameraShape")
-            ?.takeIf { it == "circle" || it == "rounded" }
-            ?: "circle"
+        cameraConfig = cameraConfigFor(intent)
+        frontCameraEnabled = cameraConfig.enabled
         cameraFailureMessage = null
         val requestedMime = if (intent.getStringExtra("codec") == "hevc") HEVC_MIME else VIDEO_MIME
         videoMime = if (supportsVideoFormat(requestedMime)) requestedMime else VIDEO_MIME
@@ -386,9 +390,9 @@ class RecordingService : Service() {
                 width = displayWidth,
                 height = displayHeight,
                 frameRate = frameRate,
-                borderColor = cameraBorderColor,
-                borderWidthDp = cameraBorderWidthDp,
-                shape = cameraShape,
+                borderColor = cameraConfig.borderColor,
+                borderWidthDp = cameraConfig.borderWidthDp,
+                shape = cameraConfig.shape,
                 onFailure = { message ->
                     cameraFailureMessage = message
                     if (recording) stopRecording(state = "error", message = message)
@@ -396,6 +400,7 @@ class RecordingService : Service() {
             )
             videoCompositor = compositor
             compositor.start()
+            showCameraPreview(compositor)
             projectionSurface = compositor.projectionSurface
         }
         virtualDisplay = activeProjection.createVirtualDisplay(
@@ -437,6 +442,157 @@ class RecordingService : Service() {
             displayHeight,
         )
     }
+
+    private fun cameraConfigFor(intent: Intent): CameraOverlayConfig {
+        val preferences = getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
+        val json = intent.getStringExtra("cameraConfigJson")
+            ?: CameraOverlayConfig.loadFromPreferences(preferences)
+        return CameraOverlayConfig.fromJson(json)
+    }
+
+    private fun showCameraPreview(compositor: ScreenCameraCompositor) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            throw SecurityException(
+                "Permita a sobreposição para mostrar a câmera flutuante durante a gravação.",
+            )
+        }
+        val sizeDp = cameraConfig.sizeDp
+        val preview = TextureView(this).apply {
+            isOpaque = false
+            surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                override fun onSurfaceTextureAvailable(
+                    surfaceTexture: SurfaceTexture,
+                    width: Int,
+                    height: Int,
+                ) {
+                    surfaceTexture.setDefaultBufferSize(width, height)
+                    val surface = Surface(surfaceTexture)
+                    cameraPreviewSurface = surface
+                    compositor.setPreviewSurface(surface)
+                }
+
+                override fun onSurfaceTextureSizeChanged(
+                    surfaceTexture: SurfaceTexture,
+                    width: Int,
+                    height: Int,
+                ) {
+                    surfaceTexture.setDefaultBufferSize(width, height)
+                }
+
+                override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
+                    compositor.setPreviewSurface(null)
+                    cameraPreviewSurface?.release()
+                    cameraPreviewSurface = null
+                    surfaceTexture.release()
+                    return true
+                }
+
+                override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
+            }
+        }
+        val frameShape = GradientDrawable().apply {
+            setColor(android.graphics.Color.argb(188, 8, 11, 18))
+            if (cameraConfig.shape == "circle") {
+                shape = GradientDrawable.OVAL
+            } else {
+                cornerRadius = dp(28).toFloat()
+            }
+            setStroke(
+                dp(2),
+                android.graphics.Color.argb(
+                    190,
+                    android.graphics.Color.red(cameraConfig.borderColor),
+                    android.graphics.Color.green(cameraConfig.borderColor),
+                    android.graphics.Color.blue(cameraConfig.borderColor),
+                ),
+            )
+        }
+        val previewFrame = FrameLayout(this).apply {
+            background = frameShape
+            clipToOutline = true
+            elevation = dp(12).toFloat()
+            addView(
+                preview,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        }
+        val params = WindowManager.LayoutParams(
+            dp(sizeDp),
+            dp(sizeDp),
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            },
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.END
+            x = dp(18)
+            y = dp(110)
+        }
+        var downRawX = 0f
+        var downRawY = 0f
+        var initialX = params.x
+        var initialY = params.y
+        previewFrame.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    initialX = params.x
+                    initialY = params.y
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    params.x = (initialX + downRawX - event.rawX).toInt()
+                    params.y = (initialY + event.rawY - downRawY).toInt()
+                    runCatching { windowManager.updateViewLayout(previewFrame, params) }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val margin = dp(16)
+                    val width = resources.displayMetrics.widthPixels
+                    val height = resources.displayMetrics.heightPixels
+                    val previewSize = dp(sizeDp)
+                    params.x = if (event.rawX < width / 2f) {
+                        (width - previewSize - margin).coerceAtLeast(margin)
+                    } else {
+                        margin
+                    }
+                    params.y = (event.rawY.toInt() - previewSize / 2)
+                        .coerceIn(margin, (height - previewSize - margin).coerceAtLeast(margin))
+                    runCatching { windowManager.updateViewLayout(previewFrame, params) }
+                    true
+                }
+                else -> false
+            }
+        }
+        cameraPreviewView = previewFrame
+        windowManager.addView(previewFrame, params)
+    }
+
+    private fun removeCameraPreview() {
+        if (Looper.myLooper() != mainLooper) {
+            android.os.Handler(mainLooper).post { removeCameraPreview() }
+            return
+        }
+        videoCompositor?.setPreviewSurface(null)
+        cameraPreviewSurface?.release()
+        cameraPreviewSurface = null
+        cameraPreviewView?.let { view ->
+            runCatching { windowManager.removeViewImmediate(view) }
+        }
+        cameraPreviewView = null
+    }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt().coerceAtLeast(1)
 
     private fun supportsVideoFormat(mime: String): Boolean =
         MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { codecInfo ->
@@ -1085,6 +1241,8 @@ class RecordingService : Service() {
             try {
                 runCatching { virtualDisplay?.release() }
                 virtualDisplay = null
+                videoCompositor?.setPreviewSurface(null)
+                removeCameraPreview()
                 runCatching { videoCompositor?.release() }
                 videoCompositor = null
                 runCatching { microphoneRecorder?.stop() }
@@ -1248,6 +1406,7 @@ class RecordingService : Service() {
     }
 
     override fun onDestroy() {
+        removeCameraPreview()
         if (recording) stopRecording()
         super.onDestroy()
     }

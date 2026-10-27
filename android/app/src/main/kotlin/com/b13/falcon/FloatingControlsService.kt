@@ -300,17 +300,8 @@ class FloatingControlsService : Service() {
             putExtra("codec", preferences.getString("codec", "h264"))
             putExtra("orientation", preferences.getString("orientation", "auto"))
             putExtra(
-                "frontCameraEnabled",
-                preferences.getBoolean("frontCameraEnabled", false),
-            )
-            putExtra("cameraShape", preferences.getString("cameraShape", "circle"))
-            putExtra(
-                "cameraBorderColor",
-                preferences.getInt("cameraBorderColor", Color.WHITE),
-            )
-            putExtra(
-                "cameraBorderWidthDp",
-                preferences.getInt("cameraBorderWidthDp", 3),
+                "cameraConfigJson",
+                CameraOverlayConfig.loadFromPreferences(preferences),
             )
             putExtra("sourceWidth", sourceWidth)
             putExtra("sourceHeight", sourceHeight)

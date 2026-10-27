@@ -149,6 +149,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
     setState(() => _settings = settings);
     try {
       await _nativeRecorder.setKeepScreenOn(settings.keepScreenOn);
+      await _nativeRecorder.saveCameraConfig(settings.cameraOverlay.configJson);
       if (settings.showFloatingControls) {
         final enabled = await _nativeRecorder.setFloatingControls(
           enabled: true,
@@ -161,10 +162,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
           codec: settings.codec,
           orientation: settings.orientation,
           bitratePreset: settings.bitratePreset,
-          frontCameraEnabled: settings.frontCameraEnabled,
-          cameraShape: settings.cameraShape,
-          cameraBorderColor: settings.cameraBorderColor,
-          cameraBorderWidthDp: settings.cameraBorderWidthDp,
+          cameraConfigJson: settings.cameraOverlay.configJson,
         );
         if (!enabled) {
           settings = settings.copyWith(showFloatingControls: false);
@@ -228,22 +226,42 @@ class _B13FalconAppState extends State<B13FalconApp> {
 
   Future<void> _toggleRecording() async {
     if (!_isRecording) {
-      if (_settings.showFloatingControls) {
+      if (_settings.showFloatingControls || _settings.cameraOverlay.enabled) {
         try {
           final granted = await _nativeRecorder.requestOverlayPermission();
           if (!mounted) return;
           if (!granted) {
+            if (_settings.cameraOverlay.enabled) {
+              _showMessage(
+                'A permissão de sobreposição é necessária para mostrar a '
+                'câmera flutuante durante a gravação.',
+              );
+              return;
+            }
             _showMessage(
               'Sem permissão de sobreposição: a gravação começará sem os '
               'controles flutuantes.',
             );
           }
         } on PlatformException catch (error) {
+          if (_settings.cameraOverlay.enabled) {
+            _showMessage(
+              error.message ??
+                  'Não foi possível autorizar a câmera flutuante na tela.',
+            );
+            return;
+          }
           _showMessage(
             error.message ??
                 'Não foi possível solicitar a permissão flutuante.',
           );
         } on MissingPluginException {
+          if (_settings.cameraOverlay.enabled) {
+            _showMessage(
+              'A câmera flutuante está disponível somente no Android.',
+            );
+            return;
+          }
           _showMessage('Os controles flutuantes estão disponíveis no Android.');
         }
       }
@@ -259,10 +277,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
         codec: _settings.codec,
         orientation: _settings.orientation,
         bitratePreset: _settings.bitratePreset,
-        frontCameraEnabled: _settings.frontCameraEnabled,
-        cameraShape: _settings.cameraShape,
-        cameraBorderColor: _settings.cameraBorderColor,
-        cameraBorderWidthDp: _settings.cameraBorderWidthDp,
+        cameraConfigJson: _settings.cameraOverlay.configJson,
       );
       if (!mounted) return;
       if (result['success'] == true) {
@@ -331,23 +346,61 @@ class _B13FalconAppState extends State<B13FalconApp> {
   }
 
   Future<void> _saveSettings(AppSettings nextSettings) async {
-    if (nextSettings.frontCameraEnabled && !_settings.frontCameraEnabled) {
+    if (nextSettings.cameraOverlay.enabled &&
+        !_settings.cameraOverlay.enabled) {
       try {
         final granted = await _nativeRecorder.requestCameraPermission();
         if (!granted) {
           _showMessage(
             'A permissão da câmera é necessária para incluir sua imagem no vídeo.',
           );
-          nextSettings = nextSettings.copyWith(frontCameraEnabled: false);
+          nextSettings = nextSettings.copyWith(
+            cameraOverlay: nextSettings.cameraOverlay.copyWith(enabled: false),
+          );
         }
       } on PlatformException catch (error) {
         _showMessage(
           error.message ?? 'Não foi possível solicitar acesso à câmera.',
         );
-        nextSettings = nextSettings.copyWith(frontCameraEnabled: false);
+        nextSettings = nextSettings.copyWith(
+          cameraOverlay: nextSettings.cameraOverlay.copyWith(enabled: false),
+        );
       } on MissingPluginException {
         _showMessage('A câmera frontal está disponível somente no Android.');
-        nextSettings = nextSettings.copyWith(frontCameraEnabled: false);
+        nextSettings = nextSettings.copyWith(
+          cameraOverlay: nextSettings.cameraOverlay.copyWith(enabled: false),
+        );
+      }
+      if (nextSettings.cameraOverlay.enabled) {
+        try {
+          final granted = await _nativeRecorder.requestOverlayPermission();
+          if (!granted) {
+            _showMessage(
+              'A permissão de sobreposição é necessária para exibir a câmera '
+              'flutuante sobre o jogo.',
+            );
+            nextSettings = nextSettings.copyWith(
+              cameraOverlay: nextSettings.cameraOverlay.copyWith(
+                enabled: false,
+              ),
+            );
+          }
+        } on PlatformException catch (error) {
+          _showMessage(
+            error.message ??
+                'Não foi possível autorizar a câmera flutuante na tela.',
+          );
+          nextSettings = nextSettings.copyWith(
+            cameraOverlay: nextSettings.cameraOverlay.copyWith(enabled: false),
+          );
+        } on MissingPluginException {
+          _showMessage(
+            'A prévia flutuante da câmera está disponível somente no Android.',
+          );
+          nextSettings = nextSettings.copyWith(
+            cameraOverlay: nextSettings.cameraOverlay.copyWith(enabled: false),
+          );
+        }
       }
     }
     if (nextSettings.showFloatingControls != _settings.showFloatingControls) {
@@ -372,10 +425,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
           codec: nextSettings.codec,
           orientation: nextSettings.orientation,
           bitratePreset: nextSettings.bitratePreset,
-          frontCameraEnabled: nextSettings.frontCameraEnabled,
-          cameraShape: nextSettings.cameraShape,
-          cameraBorderColor: nextSettings.cameraBorderColor,
-          cameraBorderWidthDp: nextSettings.cameraBorderWidthDp,
+          cameraConfigJson: nextSettings.cameraOverlay.configJson,
         );
         if (nextSettings.showFloatingControls && !enabled) {
           nextSettings = nextSettings.copyWith(showFloatingControls: false);
@@ -446,10 +496,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
           codec: nextSettings.codec,
           orientation: nextSettings.orientation,
           bitratePreset: nextSettings.bitratePreset,
-          frontCameraEnabled: nextSettings.frontCameraEnabled,
-          cameraShape: nextSettings.cameraShape,
-          cameraBorderColor: nextSettings.cameraBorderColor,
-          cameraBorderWidthDp: nextSettings.cameraBorderWidthDp,
+          cameraConfigJson: nextSettings.cameraOverlay.configJson,
         );
       } on PlatformException catch (error) {
         _showMessage(
@@ -462,6 +509,21 @@ class _B13FalconAppState extends State<B13FalconApp> {
       }
     }
     await _settingsService.saveSettings(nextSettings);
+    try {
+      await _nativeRecorder.saveCameraConfig(
+        nextSettings.cameraOverlay.configJson,
+      );
+      await _nativeRecorder.updateCameraLive(
+        nextSettings.cameraOverlay.configJson,
+      );
+    } on PlatformException catch (error) {
+      _showMessage(
+        'Configuração salva, mas não foi possível aplicar a câmera: '
+        '${error.message ?? 'erro desconhecido'}',
+      );
+    } on MissingPluginException {
+      _showMessage('A câmera frontal está disponível somente no Android.');
+    }
     if (mounted) setState(() => _settings = nextSettings);
   }
 
@@ -470,6 +532,9 @@ class _B13FalconAppState extends State<B13FalconApp> {
     if (!mounted) return;
     setState(() => _settings = const AppSettings());
     try {
+      await _nativeRecorder.saveCameraConfig(
+        _settings.cameraOverlay.configJson,
+      );
       await _nativeRecorder.setKeepScreenOn(_settings.keepScreenOn);
       await _nativeRecorder.setFloatingControls(
         enabled: _settings.showFloatingControls,
@@ -482,10 +547,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
         codec: _settings.codec,
         orientation: _settings.orientation,
         bitratePreset: _settings.bitratePreset,
-        frontCameraEnabled: _settings.frontCameraEnabled,
-        cameraShape: _settings.cameraShape,
-        cameraBorderColor: _settings.cameraBorderColor,
-        cameraBorderWidthDp: _settings.cameraBorderWidthDp,
+        cameraConfigJson: _settings.cameraOverlay.configJson,
       );
     } on PlatformException catch (error) {
       _showMessage(

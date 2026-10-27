@@ -3,7 +3,7 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual em desenvolvimento: `1.2.6+18`; branch `main`; `v1.2.5` é a última release publicada.
+- Versão atual em desenvolvimento: `1.2.9+21`; branch `main`; `v1.2.6` é a última release publicada.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
 - `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos, configuração do overlay e consentimento MediaProjection quando a gravação começa no app.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
@@ -35,10 +35,7 @@
 - `audioMode`: `both | internal | microphone | none`; valores legados em português são normalizados.
 - A captura de áudio interno exige Android 10+ e pode ser bloqueada pela aplicação capturada. Microfone exige `RECORD_AUDIO`.
 - `themeAccent` seleciona os temas animados Falcon, Ocean, Emerald ou Violet; animações respeitam a preferência de reduzir movimento do sistema.
-- `frontCameraEnabled`: `true | false`; requer permissão `CAMERA`.
-- `cameraShape`: `circle | rounded`.
-- `cameraBorderColor`: branco (`#FFFFFFFF`), Falcon (`#FFB81C2B`), Ocean (`#FF168AAD`), Emerald (`#FF16865A`), Violet (`#FF7950B8`) ou Black (`#FFC9A85A`).
-- `cameraBorderWidthDp`: 0 a 12 dp.
+- `cameraOverlay` (`cameraConfigJson` no MethodChannel/SharedPreferences): configuração única com câmera ativada, formato `circle | rounded | square`, tamanho 80–260 dp, espelho, cor ARGB livre, estilo e largura da borda, faixa/nome e posição normalizada/trava. Requer permissão `CAMERA` quando ativada.
 
 ## Funcionalidades atuais
 
@@ -47,11 +44,33 @@
 - Ferramentas flutuantes de desenho: traço livre, caixa, círculo, cores, espessura/opacidade, desfazer e limpar.
 - Biblioteca MediaStore com listar, abrir via reprodutor externo e excluir gravações.
 - Preferências persistidas localmente em `SharedPreferences`.
-- Câmera frontal composta no vídeo, com formato circular/cantos arredondados e borda colorida ajustável.
+- Câmera frontal composta no vídeo e exibida numa prévia flutuante arrastável, com tamanho ajustável, formato circular/cantos arredondados, moldura temática e encaixe nas laterais.
 - Abas inferiores Vídeos, Capturas, Ajustes e Ajuda; as notificações oferecem Iniciar quando ocioso e Pausar/Retomar e Pincel durante a gravação.
 - Lucide SVGs e licença ISC em `assets/icons/lucide/`; drawables vetoriais Android equivalentes em `android/app/src/main/res/drawable/`.
 
 ## Changelog (cronológico)
+
+### 2026-10-27 — Configuração única da câmera e migração
+
+- Criada a estrutura `CameraOverlaySettings` com JSON único, validação/clamp para formato, cores ARGB livres, tamanho, borda, faixa/nome e posição.
+- `AppSettings` migra automaticamente os campos antigos sem perder as escolhas existentes; o Android consolida a configuração em `cameraConfigJson` e a repassa aos fluxos iniciados no app e pelo overlay.
+- Adicionados os métodos de canal `saveCameraConfig` e `updateCameraLive` e testes de serialização, validação e migração do formato legado.
+- Versão elevada para `1.2.9+21`; análise e testes Flutter aprovados. A compilação nativa e o teste de captura do overlay no MP4 ainda requerem CI/aparelho.
+
+### 2026-10-27 — Refinamento visual da prévia flutuante
+
+- Reduzido o tamanho padrão da janela da câmera para 136 dp e adicionado controle entre 100 e 200 dp nos Ajustes, persistido para gravações iniciadas pelo app ou pelo flutuante.
+- Aplicada moldura escura translúcida, contorno sutil na cor da borda selecionada, sombra e recorte correspondente ao formato escolhido.
+- Ao terminar de arrastar, a prévia se encaixa na lateral mais próxima e sua posição vertical é limitada à tela.
+- Atualizada a versão para `1.2.8+20`; a exibição final precisa ser conferida em aparelho Android.
+
+### 2026-10-27 — Correção de orientação e prévia flutuante da câmera
+
+- Corrigida a orientação vertical das coordenadas de textura do compositor para que a gravação não fique de cabeça para baixo.
+- Adicionada prévia da câmera em uma janela Android flutuante, arrastável e com o formato/borda escolhidos; o compositor entrega o mesmo fluxo da câmera à prévia e ao MP4 sem abrir a câmera duas vezes.
+- A ativação da câmera agora solicita permissão de sobreposição; a gravação também verifica essa permissão antes de iniciar e a janela é removida ao parar.
+- Atualizada a versão para `1.2.7+19`. Build e teste em aparelho são necessários para confirmar orientação e exibição em cada fabricante.
+- Arquivos: `CONTEXTO.md`, `pubspec.yaml`, `lib/app.dart`, `lib/features/settings/settings_page.dart`, `android/app/src/main/kotlin/com/b13/falcon/RecordingService.kt` e `ScreenCameraCompositor.kt`.
 
 ### 2026-10-26 — Câmera frontal, controles de notificação e navegação
 
@@ -142,8 +161,8 @@
 
 ## Decisões e limitações conhecidas
 
-- A câmera frontal usa uma janela fixa no canto inferior direito, com aproximadamente 27% da menor dimensão do vídeo; posição/tamanho da janela ainda não são configuráveis. A rotação/aspecto e o desempenho dependem do sensor, encoder e GPU do aparelho.
-- A composição EGL/Camera2 ainda não foi compilada nem validada em aparelho neste ambiente; o Android SDK não está instalado localmente.
+- A janela PiP incorporada ao MP4 permanece fixa no canto inferior direito, com aproximadamente 27% da menor dimensão do vídeo; posição/tamanho gravados ainda não são configuráveis. A prévia de tela é flutuante e arrastável.
+- O compositor da versão `v1.2.6` compilou no GitHub Actions, mas a correção de orientação e a prévia introduzidas em `1.2.7+19` ainda precisam passar pelo workflow e por teste em aparelho; não há Android SDK/dispositivo local neste ambiente.
 - A publicação ainda não foi disparada: a tag só deve ser criada depois do build Android e do teste físico, com os secrets `B13_RELEASE_KEYSTORE_BASE64`, `B13_RELEASE_STORE_PASSWORD`, `B13_RELEASE_KEY_ALIAS` e `B13_RELEASE_KEY_PASSWORD` disponíveis no GitHub.
 - A aba Capturas é a tela de controles de gravação; ainda não há fluxo separado para salvar capturas estáticas em PNG/JPEG.
 - MediaProjection exige consentimento do usuário em cada nova sessão; o overlay não pode reutilizar consentimento anterior.
