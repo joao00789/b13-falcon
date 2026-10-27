@@ -78,7 +78,11 @@ class MainActivity : FlutterActivity() {
                 "setFloatingLogoOpacity" -> handleFloatingLogoOpacity(call, result)
                 "setFloatingLogoSize" -> handleFloatingLogoSize(call, result)
                 "setFloatingControls" -> handleFloatingControls(call, result)
-                "saveCameraConfig", "updateCameraLive" -> handleCameraConfig(call, result)
+                "saveCameraConfig", "updateCameraLive" -> handleCameraConfig(
+                    call,
+                    result,
+                    call.method == "updateCameraLive",
+                )
                 "getVideoCapabilities" -> handleGetVideoCapabilities(result)
                 "requestOverlayPermission" -> handleOverlayPermission(result)
                 "requestCameraPermission" -> handleCameraPermission(result)
@@ -213,6 +217,27 @@ class MainActivity : FlutterActivity() {
             "cameraConfigJson" to cameraConfigFor(call),
         )
         persistRecordingParams(pendingParams!!)
+        val cameraConfig = CameraOverlayConfig.fromJson(
+            pendingParams?.get("cameraConfigJson") as? String ?: "{}",
+        )
+        if (cameraConfig.enabled && cameraConfig.mode == "overlay") {
+            val cameraIntent = Intent(this, CameraOverlayService::class.java)
+                .setAction(CameraOverlayService.ACTION_UPDATE)
+                .putExtra("cameraConfigJson", cameraConfig.toJson())
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(cameraIntent)
+                } else {
+                    startService(cameraIntent)
+                }
+            } catch (error: Exception) {
+                android.widget.Toast.makeText(
+                    this,
+                    error.message ?: "Não foi possível iniciar a prévia da câmera.",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
 
         val projectionManager = getSystemService(MediaProjectionManager::class.java)
         val captureIntent = projectionManager.createScreenCaptureIntent()
@@ -251,7 +276,11 @@ class MainActivity : FlutterActivity() {
     private fun isCameraEnabled(cameraConfigJson: String): Boolean =
         JSONObject(cameraConfigJson).optBoolean("enabled", false)
 
-    private fun handleCameraConfig(call: MethodCall, result: MethodChannel.Result) {
+    private fun handleCameraConfig(
+        call: MethodCall,
+        result: MethodChannel.Result,
+        updateLive: Boolean,
+    ) {
         val cameraConfigJson = call.argument<String>("cameraConfigJson")
         if (cameraConfigJson == null) {
             result.error("INVALID_CAMERA_CONFIG", "A configuração da câmera está ausente.", null)
@@ -263,10 +292,55 @@ class MainActivity : FlutterActivity() {
             result.error("INVALID_CAMERA_CONFIG", "A configuração da câmera não é um JSON válido.", null)
             return
         }
-        getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
+        val preferences = getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
+        preferences
             .edit()
             .putString("cameraConfigJson", cameraConfigJson)
             .apply()
+        if (updateLive) {
+            val config = CameraOverlayConfig.fromJson(cameraConfigJson)
+            if (config.enabled && config.mode == "overlay") {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                    !Settings.canDrawOverlays(this)
+                ) {
+                    result.error(
+                        "OVERLAY_PERMISSION_REQUIRED",
+                        "A permissão de sobreposição é necessária para mostrar a câmera.",
+                        null,
+                    )
+                    return
+                }
+                if (checkSelfPermission(Manifest.permission.CAMERA) !=
+                    PackageManager.PERMISSION_GRANTED
+                ) {
+                    result.error(
+                        "CAMERA_PERMISSION_REQUIRED",
+                        "A permissão da câmera é necessária para mostrar a prévia.",
+                        null,
+                    )
+                    return
+                }
+                val serviceIntent = Intent(this, CameraOverlayService::class.java)
+                    .setAction(CameraOverlayService.ACTION_UPDATE)
+                    .putExtra("cameraConfigJson", cameraConfigJson)
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(serviceIntent)
+                    } else {
+                        startService(serviceIntent)
+                    }
+                } catch (error: Exception) {
+                    result.error(
+                        "CAMERA_OVERLAY_START_FAILED",
+                        error.message ?: "Não foi possível iniciar a prévia da câmera.",
+                        null,
+                    )
+                    return
+                }
+            } else {
+                stopService(Intent(this, CameraOverlayService::class.java))
+            }
+        }
         result.success(null)
     }
 

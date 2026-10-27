@@ -50,6 +50,11 @@
             android:foregroundServiceType="mediaProjection|microphone|camera" />
 
         <service
+            android:name=".CameraOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
+
+        <service
             android:name=".FloatingControlsService"
             android:exported="false"
             android:foregroundServiceType="specialUse">

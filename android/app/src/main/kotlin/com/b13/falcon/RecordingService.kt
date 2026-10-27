@@ -186,10 +186,11 @@ class RecordingService : Service() {
                     val needsMicrophone =
                         audioMode == "both" || audioMode == "microphone" || audioMode == "Microfone"
                     try {
+                        val cameraConfig = cameraConfigFor(intent)
                         startForegroundCompat(
                             buildNotification("Preparando gravação"),
                             needsMicrophone,
-                            cameraConfigFor(intent).enabled,
+                            cameraConfig.enabled && cameraConfig.mode == "baked",
                         )
                         startRecording(intent)
                     } catch (error: Exception) {
@@ -383,7 +384,7 @@ class RecordingService : Service() {
         openOutput()
         videoEncoder.start()
         var projectionSurface = inputSurface
-        if (frontCameraEnabled) {
+        if (frontCameraEnabled && cameraConfig.mode == "baked") {
             val compositor = ScreenCameraCompositor(
                 context = this,
                 encoderSurface = inputSurface,

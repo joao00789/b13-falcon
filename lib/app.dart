@@ -150,6 +150,11 @@ class _B13FalconAppState extends State<B13FalconApp> {
     try {
       await _nativeRecorder.setKeepScreenOn(settings.keepScreenOn);
       await _nativeRecorder.saveCameraConfig(settings.cameraOverlay.configJson);
+      if (settings.cameraOverlay.enabled) {
+        await _nativeRecorder.updateCameraLive(
+          settings.cameraOverlay.configJson,
+        );
+      }
       if (settings.showFloatingControls) {
         final enabled = await _nativeRecorder.setFloatingControls(
           enabled: true,
@@ -533,6 +538,9 @@ class _B13FalconAppState extends State<B13FalconApp> {
     setState(() => _settings = const AppSettings());
     try {
       await _nativeRecorder.saveCameraConfig(
+        _settings.cameraOverlay.configJson,
+      );
+      await _nativeRecorder.updateCameraLive(
         _settings.cameraOverlay.configJson,
       );
       await _nativeRecorder.setKeepScreenOn(_settings.keepScreenOn);

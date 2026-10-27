@@ -6,6 +6,7 @@ import org.json.JSONObject
 
 internal data class CameraOverlayConfig(
     val enabled: Boolean,
+    val mode: String,
     val shape: String,
     val cornerRadiusDp: Int,
     val sizeDp: Int,
@@ -26,6 +27,42 @@ internal data class CameraOverlayConfig(
     val yFraction: Float,
     val locked: Boolean,
 ) {
+    fun toJson(): String = JSONObject()
+        .put("enabled", enabled)
+        .put("mode", mode)
+        .put("shape", shape)
+        .put("cornerRadiusDp", cornerRadiusDp)
+        .put("sizeDp", sizeDp)
+        .put("mirror", mirror)
+        .put(
+            "border",
+            JSONObject()
+                .put("color", borderColor)
+                .put("style", borderStyle)
+                .put("widthDp", borderWidthDp)
+                .put("gradientEnd", gradientEnd)
+                .put("glow", glow),
+        )
+        .put(
+            "nameTag",
+            JSONObject()
+                .put("enabled", nameTagEnabled)
+                .put("text", nameTagText)
+                .put("style", nameTagStyle)
+                .put("bgColor", nameTagBackgroundColor)
+                .put("textColor", nameTagTextColor)
+                .put("font", nameTagFont)
+                .put("position", nameTagPosition),
+        )
+        .put(
+            "position",
+            JSONObject()
+                .put("xFraction", xFraction)
+                .put("yFraction", yFraction)
+                .put("locked", locked),
+        )
+        .toString()
+
     companion object {
         fun fromJson(json: String): CameraOverlayConfig {
             val root = JSONObject(json)
@@ -45,6 +82,8 @@ internal data class CameraOverlayConfig(
 
             return CameraOverlayConfig(
                 enabled = root.optBoolean("enabled", false),
+                mode = root.optString("mode", "overlay")
+                    .takeIf { it == "overlay" || it == "baked" } ?: "overlay",
                 shape = shape.takeIf { it in setOf("circle", "rounded", "square") }
                     ?: "circle",
                 cornerRadiusDp = root.optInt("cornerRadiusDp", 24).coerceIn(0, 80),

@@ -25,7 +25,33 @@ class CaptureConsentActivity : Activity() {
             )
             return
         }
+        startCameraPreviewIfEnabled()
         requestCaptureConsent()
+    }
+
+    private fun startCameraPreviewIfEnabled() {
+        val preferences = getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
+        val json = intent.getStringExtra("cameraConfigJson")
+            ?: CameraOverlayConfig.loadFromPreferences(preferences)
+        val config = CameraOverlayConfig.fromJson(json)
+        if (!config.enabled || config.mode != "overlay") return
+
+        val serviceIntent = Intent(this, CameraOverlayService::class.java)
+            .setAction(CameraOverlayService.ACTION_UPDATE)
+            .putExtra("cameraConfigJson", config.toJson())
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (error: Exception) {
+            Toast.makeText(
+                this,
+                error.message ?: "Não foi possível iniciar a prévia da câmera.",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
     }
 
     private fun requestCaptureConsent() {

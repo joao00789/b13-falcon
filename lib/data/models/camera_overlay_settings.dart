@@ -3,6 +3,7 @@ import 'dart:convert';
 class CameraOverlaySettings {
   const CameraOverlaySettings({
     this.enabled = false,
+    this.mode = 'overlay',
     this.shape = 'circle',
     this.cornerRadiusDp = 24,
     this.sizeDp = 140,
@@ -25,6 +26,7 @@ class CameraOverlaySettings {
   });
 
   static const validShapes = {'circle', 'rounded', 'square'};
+  static const validModes = {'overlay', 'baked'};
   static const validBorderStyles = {
     'solid',
     'dashed',
@@ -37,6 +39,7 @@ class CameraOverlaySettings {
   static const validNameTagPositions = {'bottomOverlap', 'below', 'above'};
 
   final bool enabled;
+  final String mode;
   final String shape;
   final int cornerRadiusDp;
   final int sizeDp;
@@ -61,6 +64,7 @@ class CameraOverlaySettings {
 
   CameraOverlaySettings copyWith({
     bool? enabled,
+    String? mode,
     String? shape,
     int? cornerRadiusDp,
     int? sizeDp,
@@ -83,6 +87,7 @@ class CameraOverlaySettings {
   }) {
     return CameraOverlaySettings(
       enabled: enabled ?? this.enabled,
+      mode: mode ?? this.mode,
       shape: shape ?? this.shape,
       cornerRadiusDp: cornerRadiusDp ?? this.cornerRadiusDp,
       sizeDp: sizeDp ?? this.sizeDp,
@@ -108,6 +113,7 @@ class CameraOverlaySettings {
 
   Map<String, Object> toJson() => {
     'enabled': enabled,
+    'mode': mode,
     'shape': shape,
     'cornerRadiusDp': cornerRadiusDp,
     'sizeDp': sizeDp,
@@ -149,6 +155,7 @@ class CameraOverlaySettings {
         ? value['position'] as Map
         : const {};
     final shape = _readString(value['shape'], 'circle');
+    final mode = _readString(value['mode'], 'overlay');
     final borderStyle = _readString(border['style'], 'solid');
     final nameTagStyle = _readString(nameTag['style'], 'ribbon');
     final font = _readString(nameTag['font'], 'sans-bold');
@@ -156,6 +163,7 @@ class CameraOverlaySettings {
 
     return CameraOverlaySettings(
       enabled: _readBool(value['enabled'], false),
+      mode: validModes.contains(mode) ? mode : 'overlay',
       shape: validShapes.contains(shape) ? shape : 'circle',
       cornerRadiusDp: _readInt(
         value['cornerRadiusDp'],

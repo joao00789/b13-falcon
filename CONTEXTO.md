@@ -3,13 +3,13 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual em desenvolvimento: `1.2.9+21`; branch `main`; `v1.2.6` é a última release publicada.
+- Versão atual em desenvolvimento: `1.2.10+22`; branch `main`; `v1.2.6` é a última release publicada.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
 - `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos, configuração do overlay e consentimento MediaProjection quando a gravação começa no app.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
 - `FloatingControlsService` mantém o overlay e envia ações de gravar/pausar/retomar/parar e desenho.
 - `RecordingService` é o serviço em primeiro plano que controla MediaProjection, VirtualDisplay, MediaCodec, captura/mixagem de áudio, MediaMuxer e publicação MP4 via MediaStore em `Movies/B13 Falcon`.
-- Quando a câmera frontal está habilitada, `ScreenCameraCompositor` combina a imagem do VirtualDisplay e a textura da câmera frontal via Camera2/EGL/GLES antes de enviar os quadros ao encoder; a sobreposição fica incorporada no MP4.
+- `CameraOverlayService` usa CameraX em modo `PreviewView.ImplementationMode.COMPATIBLE` para exibir uma janela flutuante frontal antes/durante a gravação; o MediaProjection deve capturá-la no MP4, mas isso depende de confirmação física. O modo `baked` mantém o `ScreenCameraCompositor` como fallback.
 - Broadcasts do `RecordingService` comunicam `recording`, `paused`, `stopped` e `error` à interface e ao overlay.
 
 ### Fluxos
@@ -44,11 +44,18 @@
 - Ferramentas flutuantes de desenho: traço livre, caixa, círculo, cores, espessura/opacidade, desfazer e limpar.
 - Biblioteca MediaStore com listar, abrir via reprodutor externo e excluir gravações.
 - Preferências persistidas localmente em `SharedPreferences`.
-- Câmera frontal composta no vídeo e exibida numa prévia flutuante arrastável, com tamanho ajustável, formato circular/cantos arredondados, moldura temática e encaixe nas laterais.
+- Câmera frontal com prévia CameraX em janela flutuante e compositor antigo preservado como alternativa `baked`; a inclusão da janela no vídeo requer validação em aparelho.
 - Abas inferiores Vídeos, Capturas, Ajustes e Ajuda; as notificações oferecem Iniciar quando ocioso e Pausar/Retomar e Pincel durante a gravação.
 - Lucide SVGs e licença ISC em `assets/icons/lucide/`; drawables vetoriais Android equivalentes em `android/app/src/main/res/drawable/`.
 
 ## Changelog (cronológico)
+
+### 2026-10-27 — Serviço de prévia CameraX
+
+- Adicionado `CameraOverlayService` (`LifecycleService`) com CameraX 1.6.2 estável e preview compatível via `TextureView`, janela flutuante arrastável e notificação foreground de câmera.
+- Ao habilitar a câmera nos Ajustes, o serviço exibe a prévia sem gravar; inicia novamente antes do consentimento quando necessário. No modo `overlay`, `RecordingService` entrega a tela diretamente ao encoder e deixa a câmera como janela; `baked` preserva o compositor EGL existente.
+- Falhas de acesso/abertura da câmera removem a janela e exibem aviso no serviço de câmera, sem chamar a finalização do gravador. A câmera ainda precisa ser confirmada no MP4 via MediaProjection em aparelho.
+- Atualizada a versão para `1.2.10+22`; validação nativa pendente por falta de Gradle Wrapper/SDK local.
 
 ### 2026-10-27 — Configuração única da câmera e migração
 
@@ -161,7 +168,7 @@
 
 ## Decisões e limitações conhecidas
 
-- A janela PiP incorporada ao MP4 permanece fixa no canto inferior direito, com aproximadamente 27% da menor dimensão do vídeo; posição/tamanho gravados ainda não são configuráveis. A prévia de tela é flutuante e arrastável.
+- O compositor `baked` permanece no canto inferior direito, com aproximadamente 27% da menor dimensão do vídeo. O modo CameraX overlay é arrastável e usa posição fracionária; sincronização total da posição da janela no MP4 ainda requer validação.
 - O compositor da versão `v1.2.6` compilou no GitHub Actions, mas a correção de orientação e a prévia introduzidas em `1.2.7+19` ainda precisam passar pelo workflow e por teste em aparelho; não há Android SDK/dispositivo local neste ambiente.
 - A publicação ainda não foi disparada: a tag só deve ser criada depois do build Android e do teste físico, com os secrets `B13_RELEASE_KEYSTORE_BASE64`, `B13_RELEASE_STORE_PASSWORD`, `B13_RELEASE_KEY_ALIAS` e `B13_RELEASE_KEY_PASSWORD` disponíveis no GitHub.
 - A aba Capturas é a tela de controles de gravação; ainda não há fluxo separado para salvar capturas estáticas em PNG/JPEG.

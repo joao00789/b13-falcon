@@ -115,6 +115,7 @@ void main() {
   test('camera config can be serialized as the native bridge JSON string', () {
     const camera = CameraOverlaySettings(
       enabled: true,
+      mode: 'baked',
       shape: 'square',
       borderStyle: 'gradient',
       nameTagText: 'B13 FALCON',
@@ -122,6 +123,7 @@ void main() {
     final restored = CameraOverlaySettings.fromJson(camera.configJson);
 
     expect(restored.enabled, isTrue);
+    expect(restored.mode, 'baked');
     expect(restored.shape, 'square');
     expect(restored.borderStyle, 'gradient');
     expect(restored.nameTagText, 'B13 FALCON');
