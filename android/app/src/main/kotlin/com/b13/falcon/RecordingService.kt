@@ -50,6 +50,10 @@ class RecordingService : Service() {
         const val EXTRA_DATA = "extra_data"
         const val CHANNEL_ID = "b13_falcon_recording"
         const val STATUS_ACTION = "com.b13.falcon.RECORDING_STATUS"
+        @Volatile private var currentState = "stopped"
+        @Volatile private var sessionStartedAtMs = 0L
+        @Volatile private var sessionPausedAtMs = 0L
+        @Volatile private var totalPausedMs = 0L
         private const val NOTIFICATION_ID = 101
         private const val VIDEO_MIME = "video/avc"
         private const val HEVC_MIME = "video/hevc"
@@ -59,6 +63,33 @@ class RecordingService : Service() {
         private const val PLAYBACK_CHANNELS = 2
         private const val MAX_PENDING_SAMPLE_COUNT = 600
         private const val MAX_PENDING_SAMPLE_BYTES = 20L * 1024 * 1024
+
+        fun currentStatus(): String = currentState
+
+        fun currentElapsedSeconds(): Long {
+            if (currentState != "recording" && currentState != "paused") return 0L
+            val now = android.os.SystemClock.elapsedRealtime()
+            val end = if (currentState == "paused") sessionPausedAtMs else now
+            return ((end - sessionStartedAtMs - totalPausedMs).coerceAtLeast(0L)) / 1000L
+        }
+
+        private fun resetSessionClock() {
+            sessionStartedAtMs = android.os.SystemClock.elapsedRealtime()
+            sessionPausedAtMs = 0L
+            totalPausedMs = 0L
+        }
+
+        private fun pauseSessionClock() {
+            sessionPausedAtMs = android.os.SystemClock.elapsedRealtime()
+        }
+
+        private fun resumeSessionClock() {
+            val pauseStart = sessionPausedAtMs
+            if (pauseStart > 0L) {
+                totalPausedMs += android.os.SystemClock.elapsedRealtime() - pauseStart
+                sessionPausedAtMs = 0L
+            }
+        }
     }
 
     private data class EncodedSample(
@@ -92,6 +123,12 @@ class RecordingService : Service() {
     private var bitRate = 8_000_000
     private var videoMime = VIDEO_MIME
     private var outputTitle = "B13_FALCON"
+    private var videoCompositor: ScreenCameraCompositor? = null
+    private var frontCameraEnabled = false
+    @Volatile private var cameraFailureMessage: String? = null
+    private var cameraBorderColor = android.graphics.Color.WHITE
+    private var cameraBorderWidthDp = 3
+    private var cameraShape = "circle"
     private var drainThread: Thread? = null
     private var audioDrainThread: Thread? = null
     private var microphoneReaderThread: Thread? = null
@@ -137,7 +174,11 @@ class RecordingService : Service() {
                     val audioMode = intent.getStringExtra("audioMode")
                     val needsMicrophone =
                         audioMode == "both" || audioMode == "microphone" || audioMode == "Microfone"
-                    startForegroundCompat(buildNotification("Preparando gravação"), needsMicrophone)
+                    startForegroundCompat(
+                        buildNotification("Preparando gravação"),
+                        needsMicrophone,
+                        intent.getBooleanExtra("frontCameraEnabled", false),
+                    )
                     try {
                         startRecording(intent)
                     } catch (error: Exception) {
@@ -158,6 +199,8 @@ class RecordingService : Service() {
                         pauseIntervals.add(PauseInterval(System.nanoTime() / 1000L))
                     }
                     paused = true
+                    pauseSessionClock()
+                    videoCompositor?.setPaused(true)
                     getSystemService(NotificationManager::class.java)
                         .notify(NOTIFICATION_ID, buildNotification("Gravação pausada"))
                     sendStatus("paused", "Gravação pausada.")
@@ -166,11 +209,15 @@ class RecordingService : Service() {
             }
             ACTION_RESUME -> {
                 if (recording && paused) {
-                    virtualDisplay?.setSurface(encoderInputSurface)
+                    virtualDisplay?.setSurface(
+                        videoCompositor?.projectionSurface ?: encoderInputSurface,
+                    )
                     synchronized(pauseIntervals) {
                         pauseIntervals.lastOrNull()?.endRealtimeUs = System.nanoTime() / 1000L
                     }
+                    resumeSessionClock()
                     paused = false
+                    videoCompositor?.setPaused(false)
                     getSystemService(NotificationManager::class.java)
                         .notify(NOTIFICATION_ID, buildNotification("B13 FALCON gravando..."))
                     sendStatus("recording", "Gravação retomada.")
@@ -181,11 +228,18 @@ class RecordingService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun startForegroundCompat(notification: Notification, withMicrophone: Boolean) {
+    private fun startForegroundCompat(
+        notification: Notification,
+        withMicrophone: Boolean,
+        withCamera: Boolean = false,
+    ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             var serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
             if (withMicrophone && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            }
+            if (withCamera && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
             }
             startForeground(NOTIFICATION_ID, notification, serviceType)
         } else {
@@ -249,6 +303,16 @@ class RecordingService : Service() {
         displayHeight = ((sourceHeight * scale).toInt() / 2) * 2
         frameRate = (intent.getIntExtra("fps", 30)).coerceIn(15, 90)
         bitRate = (intent.getIntExtra("bitrateKbps", 16000).coerceIn(4_000, 80_000)) * 1000
+        frontCameraEnabled = intent.getBooleanExtra("frontCameraEnabled", false)
+        cameraBorderColor = intent.getIntExtra(
+            "cameraBorderColor",
+            android.graphics.Color.WHITE,
+        )
+        cameraBorderWidthDp = intent.getIntExtra("cameraBorderWidthDp", 3).coerceIn(0, 12)
+        cameraShape = intent.getStringExtra("cameraShape")
+            ?.takeIf { it == "circle" || it == "rounded" }
+            ?: "circle"
+        cameraFailureMessage = null
         val requestedMime = if (intent.getStringExtra("codec") == "hevc") HEVC_MIME else VIDEO_MIME
         videoMime = if (supportsVideoFormat(requestedMime)) requestedMime else VIDEO_MIME
         outputTitle = (intent.getStringExtra("title") ?: "B13_FALCON").replace(Regex("[^A-Za-z0-9_-]"), "_")
@@ -314,18 +378,43 @@ class RecordingService : Service() {
         encoderInputSurface = inputSurface
         openOutput()
         videoEncoder.start()
+        var projectionSurface = inputSurface
+        if (frontCameraEnabled) {
+            val compositor = ScreenCameraCompositor(
+                context = this,
+                encoderSurface = inputSurface,
+                width = displayWidth,
+                height = displayHeight,
+                frameRate = frameRate,
+                borderColor = cameraBorderColor,
+                borderWidthDp = cameraBorderWidthDp,
+                shape = cameraShape,
+                onFailure = { message ->
+                    cameraFailureMessage = message
+                    if (recording) stopRecording(state = "error", message = message)
+                },
+            )
+            videoCompositor = compositor
+            compositor.start()
+            projectionSurface = compositor.projectionSurface
+        }
         virtualDisplay = activeProjection.createVirtualDisplay(
             "B13 FALCON Capture",
             displayWidth,
             displayHeight,
             displayMetrics.densityDpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            inputSurface,
+            projectionSurface,
             null,
             null,
         ) ?: throw IOException("O Android não conseguiu criar a tela virtual.")
         recording = true
         paused = false
+        resetSessionClock()
+        cameraFailureMessage?.let { message ->
+            stopRecording(state = "error", message = message)
+            throw IOException(message)
+        }
         drainThread = Thread(::drainEncoder, "B13FalconEncoderDrain").also { it.start() }
         if (audioRequired) {
             audioDrainThread = Thread(::drainAudioEncoder, "B13FalconAudioDrain").also { it.start() }
@@ -996,6 +1085,8 @@ class RecordingService : Service() {
             try {
                 runCatching { virtualDisplay?.release() }
                 virtualDisplay = null
+                runCatching { videoCompositor?.release() }
+                videoCompositor = null
                 runCatching { microphoneRecorder?.stop() }
                 runCatching { playbackRecorder?.stop() }
                 joinThread(microphoneReaderThread, 1000)
@@ -1100,6 +1191,7 @@ class RecordingService : Service() {
         actualWidth: Int? = null,
         actualHeight: Int? = null,
     ) {
+        currentState = state
         sendBroadcast(Intent(STATUS_ACTION).setPackage(packageName).apply {
             putExtra("state", state)
             putExtra("message", message)
@@ -1135,12 +1227,21 @@ class RecordingService : Service() {
             Intent(this, RecordingService::class.java).apply { action = if (paused) ACTION_RESUME else ACTION_PAUSE },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val brushIntent = PendingIntent.getService(
+            this,
+            2,
+            Intent(this, FloatingControlsService::class.java).apply {
+                action = FloatingControlsService.ACTION_NOTIFICATION_BRUSH
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("B13 FALCON")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_sdcard)
             .addAction(if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause, if (paused) "Retomar" else "Pausar", pauseIntent)
+            .addAction(R.drawable.ic_lucide_brush, "Pincel", brushIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Parar", stopIntent)
             .setOngoing(true)
             .build()

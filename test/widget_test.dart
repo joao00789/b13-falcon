@@ -48,6 +48,32 @@ void main() {
     expect(AppThemeData.fromId('black').name, 'Black');
   });
 
+  test('camera overlay settings survive serialization safely', () {
+    const settings = AppSettings(
+      frontCameraEnabled: true,
+      cameraShape: 'rounded',
+      cameraBorderColor: 0xFF168AAD - 0x100000000,
+      cameraBorderWidthDp: 7,
+    );
+    final restored = AppSettings.fromJson(settings.toJson());
+
+    expect(restored.frontCameraEnabled, isTrue);
+    expect(restored.cameraShape, 'rounded');
+    expect(restored.cameraBorderColor, settings.cameraBorderColor);
+    expect(restored.cameraBorderWidthDp, 7);
+
+    final recovered = AppSettings.fromJson({
+      'cameraShape': 'invalid',
+      'cameraBorderColor': 0xFF123456,
+      'cameraBorderWidthDp': 100,
+      'frontCameraEnabled': 'true',
+    });
+    expect(recovered.cameraShape, 'circle');
+    expect(recovered.cameraBorderColor, -1);
+    expect(recovered.cameraBorderWidthDp, 12);
+    expect(recovered.frontCameraEnabled, isFalse);
+  });
+
   testWidgets('B13 FALCON app loads', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const B13FalconApp());

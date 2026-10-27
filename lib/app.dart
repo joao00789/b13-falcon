@@ -6,6 +6,7 @@ import 'package:b13_falcon/core/theme/app_theme_data.dart';
 import 'package:b13_falcon/data/models/app_settings.dart';
 import 'package:b13_falcon/data/models/saved_recording.dart';
 import 'package:b13_falcon/features/home/home_page.dart';
+import 'package:b13_falcon/features/help/help_page.dart';
 import 'package:b13_falcon/features/library/library_page.dart';
 import 'package:b13_falcon/features/settings/settings_page.dart';
 import 'package:b13_falcon/services/native_recorder.dart';
@@ -29,7 +30,6 @@ class _B13FalconAppState extends State<B13FalconApp> {
   List<SavedRecording> _recordings = const [];
   bool _isRecording = false;
   bool _isPaused = false;
-  bool _floatingMenuExpanded = false;
   Duration _elapsed = Duration.zero;
   Timer? _timer;
   int _selectedIndex = 0;
@@ -54,9 +54,37 @@ class _B13FalconAppState extends State<B13FalconApp> {
   void initState() {
     super.initState();
     _nativeRecorder.setRecordingStatusHandler(_onNativeRecordingStatus);
+    unawaited(_restoreRecordingStatus());
     unawaited(_loadSettings());
     unawaited(_loadRecordings());
     unawaited(_loadVideoCapabilities());
+  }
+
+  Future<void> _restoreRecordingStatus() async {
+    try {
+      final status = await _nativeRecorder.getStatus();
+      if (!mounted || status['success'] != true) return;
+      final recording = status['recording'] as bool? ?? false;
+      final paused = status['paused'] as bool? ?? false;
+      final elapsedSeconds = (status['elapsedSeconds'] as num?)?.toInt() ?? 0;
+      setState(() {
+        _isRecording = recording;
+        _isPaused = paused;
+        _elapsed = Duration(seconds: elapsedSeconds.clamp(0, 1 << 31).toInt());
+        _statusMessage = recording
+            ? paused
+                  ? 'Gravação pausada.'
+                  : 'Gravação em andamento.'
+            : _statusMessage;
+      });
+      if (recording && !paused) _startTicker();
+    } on PlatformException catch (error) {
+      if (mounted) {
+        _showMessage(error.message ?? 'Não foi possível consultar a gravação.');
+      }
+    } on MissingPluginException {
+      // Native recording status is unavailable in widget previews.
+    }
   }
 
   Future<void> _loadVideoCapabilities() async {
@@ -133,6 +161,10 @@ class _B13FalconAppState extends State<B13FalconApp> {
           codec: settings.codec,
           orientation: settings.orientation,
           bitratePreset: settings.bitratePreset,
+          frontCameraEnabled: settings.frontCameraEnabled,
+          cameraShape: settings.cameraShape,
+          cameraBorderColor: settings.cameraBorderColor,
+          cameraBorderWidthDp: settings.cameraBorderWidthDp,
         );
         if (!enabled) {
           settings = settings.copyWith(showFloatingControls: false);
@@ -227,6 +259,10 @@ class _B13FalconAppState extends State<B13FalconApp> {
         codec: _settings.codec,
         orientation: _settings.orientation,
         bitratePreset: _settings.bitratePreset,
+        frontCameraEnabled: _settings.frontCameraEnabled,
+        cameraShape: _settings.cameraShape,
+        cameraBorderColor: _settings.cameraBorderColor,
+        cameraBorderWidthDp: _settings.cameraBorderWidthDp,
       );
       if (!mounted) return;
       if (result['success'] == true) {
@@ -235,7 +271,6 @@ class _B13FalconAppState extends State<B13FalconApp> {
           _isPaused = false;
           _elapsed = Duration.zero;
           _statusMessage = 'Gravação em andamento.';
-          _floatingMenuExpanded = false;
         });
         _startTicker();
       } else {
@@ -296,6 +331,25 @@ class _B13FalconAppState extends State<B13FalconApp> {
   }
 
   Future<void> _saveSettings(AppSettings nextSettings) async {
+    if (nextSettings.frontCameraEnabled && !_settings.frontCameraEnabled) {
+      try {
+        final granted = await _nativeRecorder.requestCameraPermission();
+        if (!granted) {
+          _showMessage(
+            'A permissão da câmera é necessária para incluir sua imagem no vídeo.',
+          );
+          nextSettings = nextSettings.copyWith(frontCameraEnabled: false);
+        }
+      } on PlatformException catch (error) {
+        _showMessage(
+          error.message ?? 'Não foi possível solicitar acesso à câmera.',
+        );
+        nextSettings = nextSettings.copyWith(frontCameraEnabled: false);
+      } on MissingPluginException {
+        _showMessage('A câmera frontal está disponível somente no Android.');
+        nextSettings = nextSettings.copyWith(frontCameraEnabled: false);
+      }
+    }
     if (nextSettings.showFloatingControls != _settings.showFloatingControls) {
       if (nextSettings.showFloatingControls) {
         final permitted = await _nativeRecorder.requestOverlayPermission();
@@ -318,6 +372,10 @@ class _B13FalconAppState extends State<B13FalconApp> {
           codec: nextSettings.codec,
           orientation: nextSettings.orientation,
           bitratePreset: nextSettings.bitratePreset,
+          frontCameraEnabled: nextSettings.frontCameraEnabled,
+          cameraShape: nextSettings.cameraShape,
+          cameraBorderColor: nextSettings.cameraBorderColor,
+          cameraBorderWidthDp: nextSettings.cameraBorderWidthDp,
         );
         if (nextSettings.showFloatingControls && !enabled) {
           nextSettings = nextSettings.copyWith(showFloatingControls: false);
@@ -388,6 +446,10 @@ class _B13FalconAppState extends State<B13FalconApp> {
           codec: nextSettings.codec,
           orientation: nextSettings.orientation,
           bitratePreset: nextSettings.bitratePreset,
+          frontCameraEnabled: nextSettings.frontCameraEnabled,
+          cameraShape: nextSettings.cameraShape,
+          cameraBorderColor: nextSettings.cameraBorderColor,
+          cameraBorderWidthDp: nextSettings.cameraBorderWidthDp,
         );
       } on PlatformException catch (error) {
         _showMessage(
@@ -420,6 +482,10 @@ class _B13FalconAppState extends State<B13FalconApp> {
         codec: _settings.codec,
         orientation: _settings.orientation,
         bitratePreset: _settings.bitratePreset,
+        frontCameraEnabled: _settings.frontCameraEnabled,
+        cameraShape: _settings.cameraShape,
+        cameraBorderColor: _settings.cameraBorderColor,
+        cameraBorderWidthDp: _settings.cameraBorderWidthDp,
       );
     } on PlatformException catch (error) {
       _showMessage(
@@ -485,8 +551,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
 
   void _openLibrary() {
     setState(() {
-      _selectedIndex = 1;
-      _floatingMenuExpanded = false;
+      _selectedIndex = 0;
     });
     unawaited(_loadRecordings());
   }
@@ -494,7 +559,6 @@ class _B13FalconAppState extends State<B13FalconApp> {
   void _openSettings() {
     setState(() {
       _selectedIndex = 2;
-      _floatingMenuExpanded = false;
     });
   }
 
@@ -502,6 +566,14 @@ class _B13FalconAppState extends State<B13FalconApp> {
   Widget build(BuildContext context) {
     final themeData = AppThemeData.fromId(_settings.themeAccent);
     final pages = [
+      LibraryPage(
+        recordings: _recordings,
+        errorMessage: _recordingsError,
+        onRefresh: _loadRecordings,
+        onOpenRecording: _openRecording,
+        onDeleteRecording: _deleteRecording,
+        onBack: _goHome,
+      ),
       HomePage(
         settings: _settings,
         isRecording: _isRecording,
@@ -516,14 +588,6 @@ class _B13FalconAppState extends State<B13FalconApp> {
         onOpenSettings: _openSettings,
         onOpenRecording: _openRecording,
       ),
-      LibraryPage(
-        recordings: _recordings,
-        errorMessage: _recordingsError,
-        onRefresh: _loadRecordings,
-        onOpenRecording: _openRecording,
-        onDeleteRecording: _deleteRecording,
-        onBack: _goHome,
-      ),
       SettingsPage(
         settings: _settings,
         onChanged: _saveSettings,
@@ -535,6 +599,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
         sourceWidth: _screenWidth,
         sourceHeight: _screenHeight,
       ),
+      const HelpPage(),
     ];
 
     return MaterialApp(
@@ -586,9 +651,18 @@ class _B13FalconAppState extends State<B13FalconApp> {
                 }),
               ),
             ),
-            floatingActionButton: _settings.showFloatingControls
-                ? _buildFloatingControls()
-                : null,
+            floatingActionButton: FloatingActionButton(
+              heroTag: 'capture-action',
+              tooltip: _isRecording ? 'Parar gravação' : 'Iniciar gravação',
+              onPressed: _toggleRecording,
+              backgroundColor: _isRecording
+                  ? Colors.red.shade700
+                  : Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+              child: Icon(
+                _isRecording ? Icons.stop_rounded : Icons.videocam_rounded,
+              ),
+            ),
             floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
             bottomNavigationBar: _buildFloatingNavigation(context),
           ),
@@ -597,169 +671,29 @@ class _B13FalconAppState extends State<B13FalconApp> {
     );
   }
 
-  Widget _buildFloatingControls() {
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-      alignment: Alignment.bottomRight,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (_floatingMenuExpanded && _isRecording) ...[
-            FloatingActionButton.small(
-              heroTag: 'floating-stop',
-              tooltip: 'Parar gravação',
-              onPressed: _toggleRecording,
-              child: const Icon(Icons.stop_rounded),
-            ),
-            const SizedBox(height: 10),
-          ],
-          if (_floatingMenuExpanded && !_isRecording) ...[
-            FloatingActionButton.small(
-              heroTag: 'floating-start',
-              tooltip: 'Iniciar gravação',
-              onPressed: _toggleRecording,
-              child: const Icon(Icons.fiber_manual_record_rounded),
-            ),
-            const SizedBox(height: 10),
-          ],
-          if (_floatingMenuExpanded && _isRecording) ...[
-            FloatingActionButton.small(
-              heroTag: 'floating-pause',
-              tooltip: _isPaused ? 'Retomar gravação' : 'Pausar gravação',
-              onPressed: _togglePause,
-              child: Icon(
-                _isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-          if (_floatingMenuExpanded) ...[
-            FloatingActionButton.small(
-              heroTag: 'floating-library',
-              tooltip: 'Abrir biblioteca',
-              onPressed: _openLibrary,
-              child: const Icon(Icons.video_library_outlined),
-            ),
-            const SizedBox(height: 10),
-          ],
-          FloatingActionButton(
-            heroTag: 'floating-main',
-            tooltip: _floatingMenuExpanded
-                ? 'Fechar menu flutuante'
-                : 'Abrir menu flutuante',
-            onPressed: () =>
-                setState(() => _floatingMenuExpanded = !_floatingMenuExpanded),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              child: _floatingMenuExpanded
-                  ? const Icon(Icons.close_rounded, key: ValueKey('close'))
-                  : ClipOval(
-                      key: const ValueKey('logo'),
-                      child: Opacity(
-                        opacity: _settings.floatingLogoOpacity,
-                        child: Image.asset(
-                          'logo B13 falcon.png',
-                          fit: BoxFit.cover,
-                          width: 56,
-                          height: 56,
-                        ),
-                      ),
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFloatingNavigation(BuildContext context) {
     const destinations = [
-      (Icons.home_rounded, 'Início'),
-      (Icons.video_library_rounded, 'Vídeos'),
-      (Icons.settings_rounded, 'Ajustes'),
+      (Icons.videocam_outlined, 'Vídeos'),
+      (Icons.photo_camera_outlined, 'Capturas'),
+      (Icons.settings_outlined, 'Ajustes'),
+      (Icons.help_outline_rounded, 'Ajuda'),
     ];
-    return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(20, 4, 20, 10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: Theme.of(context).dividerColor),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x33000000),
-              blurRadius: 18,
-              offset: Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Row(
-          children: List.generate(destinations.length, (index) {
-            final destination = destinations[index];
-            final selected = _selectedIndex == index;
-            return Expanded(
-              child: Semantics(
-                button: true,
-                selected: selected,
-                label: destination.$2,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(22),
-                  onTap: () {
-                    setState(() {
-                      _selectedIndex = index;
-                      _floatingMenuExpanded = false;
-                    });
-                    if (index == 1) unawaited(_loadRecordings());
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 240),
-                    curve: Curves.easeOutCubic,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    padding: const EdgeInsets.symmetric(vertical: 7),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? Theme.of(context).colorScheme.primary
-                                .withValues(alpha: 0.13)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AnimatedScale(
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOutBack,
-                          scale: selected ? 1.08 : 1,
-                          child: Icon(
-                            destination.$1,
-                            color: selected
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).iconTheme.color,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          destination.$2,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: selected
-                                    ? Theme.of(context).colorScheme.primary
-                                    : null,
-                                fontWeight: selected ? FontWeight.w700 : null,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }),
-        ),
-      ),
+    return NavigationBar(
+      selectedIndex: _selectedIndex,
+      height: 66,
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      onDestinationSelected: (index) {
+        setState(() => _selectedIndex = index);
+        if (index == 0) unawaited(_loadRecordings());
+      },
+      destinations: [
+        for (final destination in destinations)
+          NavigationDestination(
+            icon: Icon(destination.$1),
+            selectedIcon: Icon(destination.$1),
+            label: destination.$2,
+          ),
+      ],
     );
   }
 

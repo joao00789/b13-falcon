@@ -37,12 +37,11 @@ class SettingsPage extends StatelessWidget {
       ..sort();
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          onPressed: onBack,
-          tooltip: 'Voltar para início',
-          icon: const Icon(Icons.arrow_back_rounded),
+        automaticallyImplyLeading: false,
+        title: const Align(
+          alignment: Alignment.centerLeft,
+          child: Text('Configurações'),
         ),
-        title: const Text('Configurações'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -231,6 +230,142 @@ class SettingsPage extends StatelessWidget {
                       settings.copyWith(floatingLogoSizeDp: value.round()),
                     ),
                   ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          EntranceAnimation(
+            delay: const Duration(milliseconds: 205),
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: theme.dividerColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Câmera frontal', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Inclua sua câmera no vídeo gravado. A composição usa o '
+                    'encoder do aparelho e pode reduzir o FPS em modelos mais fracos.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Gravar câmera frontal'),
+                    subtitle: const Text(
+                      'A imagem será incorporada ao MP4, não apenas exibida na tela.',
+                    ),
+                    value: settings.frontCameraEnabled,
+                    onChanged: (value) =>
+                        onChanged(settings.copyWith(frontCameraEnabled: value)),
+                  ),
+                  if (settings.frontCameraEnabled) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Formato da câmera',
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      children:
+                          const [
+                            ('circle', 'Circular'),
+                            ('rounded', 'Cantos arredondados'),
+                          ].map((shape) {
+                            final (value, label) = shape;
+                            return ChoiceChip(
+                              label: Text(label),
+                              selected: settings.cameraShape == value,
+                              onSelected: (_) => onChanged(
+                                settings.copyWith(cameraShape: value),
+                              ),
+                            );
+                          }).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Cor da borda', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 10,
+                      children:
+                          const [
+                            (-1, 'Branca'),
+                            (0xFFB81C2B - 0x100000000, 'Falcon'),
+                            (0xFF168AAD - 0x100000000, 'Ocean'),
+                            (0xFF16865A - 0x100000000, 'Emerald'),
+                            (0xFF7950B8 - 0x100000000, 'Violet'),
+                            (0xFFC9A85A - 0x100000000, 'Black'),
+                          ].map((option) {
+                            final (value, label) = option;
+                            final selected =
+                                settings.cameraBorderColor == value;
+                            return Tooltip(
+                              message: label,
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: () => onChanged(
+                                  settings.copyWith(cameraBorderColor: value),
+                                ),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 160),
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Color(value & 0xFFFFFFFF),
+                                    border: Border.all(
+                                      color: selected
+                                          ? theme.colorScheme.primary
+                                          : theme.dividerColor,
+                                      width: selected ? 3 : 1,
+                                    ),
+                                  ),
+                                  child: selected
+                                      ? Icon(
+                                          Icons.check_rounded,
+                                          size: 18,
+                                          color:
+                                              theme.brightness ==
+                                                  Brightness.dark
+                                              ? Colors.black
+                                              : Colors.white,
+                                        )
+                                      : null,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Espessura da borda',
+                            style: theme.textTheme.titleSmall,
+                          ),
+                        ),
+                        Text('${settings.cameraBorderWidthDp} dp'),
+                      ],
+                    ),
+                    Slider(
+                      min: 0,
+                      max: 12,
+                      divisions: 12,
+                      value: settings.cameraBorderWidthDp.toDouble(),
+                      label: '${settings.cameraBorderWidthDp} dp',
+                      onChanged: (value) => onChanged(
+                        settings.copyWith(cameraBorderWidthDp: value.round()),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

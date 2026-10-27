@@ -1,5 +1,4 @@
 import 'package:b13_falcon/core/constants/app_colors.dart';
-import 'package:b13_falcon/core/constants/app_strings.dart';
 import 'package:b13_falcon/core/utils/formatters.dart';
 import 'package:b13_falcon/core/theme/app_theme_data.dart';
 import 'package:b13_falcon/core/widgets/entrance_animation.dart';
@@ -67,7 +66,7 @@ class HomePage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            AppStrings.appName,
+                            'Capturas',
                             style: theme.textTheme.headlineMedium?.copyWith(
                               fontWeight: FontWeight.w800,
                               letterSpacing: 1.2,

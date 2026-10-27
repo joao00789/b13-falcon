@@ -29,6 +29,15 @@ class RecordingNativeBridge {
     }
   }
 
+  Future<bool> requestCameraPermission() async {
+    try {
+      return await _channel.invokeMethod<bool>('requestCameraPermission') ??
+          false;
+    } on PlatformException {
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> getVideoCapabilities() async {
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
@@ -52,6 +61,10 @@ class RecordingNativeBridge {
     required String codec,
     required String orientation,
     required String bitratePreset,
+    required bool frontCameraEnabled,
+    required String cameraShape,
+    required int cameraBorderColor,
+    required int cameraBorderWidthDp,
   }) async {
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
@@ -68,6 +81,10 @@ class RecordingNativeBridge {
           'codec': codec,
           'orientation': orientation,
           'bitratePreset': bitratePreset,
+          'frontCameraEnabled': frontCameraEnabled,
+          'cameraShape': cameraShape,
+          'cameraBorderColor': cameraBorderColor,
+          'cameraBorderWidthDp': cameraBorderWidthDp,
         },
       );
       return Map<String, dynamic>.from(result ?? const <dynamic, dynamic>{});
@@ -184,6 +201,10 @@ class RecordingNativeBridge {
     required String codec,
     required String orientation,
     required String bitratePreset,
+    required bool frontCameraEnabled,
+    required String cameraShape,
+    required int cameraBorderColor,
+    required int cameraBorderWidthDp,
   }) async {
     return await _channel.invokeMethod<bool>('setFloatingControls', {
           'enabled': enabled,
@@ -196,6 +217,10 @@ class RecordingNativeBridge {
           'codec': codec,
           'orientation': orientation,
           'bitratePreset': bitratePreset,
+          'frontCameraEnabled': frontCameraEnabled,
+          'cameraShape': cameraShape,
+          'cameraBorderColor': cameraBorderColor,
+          'cameraBorderWidthDp': cameraBorderWidthDp,
         }) ??
         false;
   }

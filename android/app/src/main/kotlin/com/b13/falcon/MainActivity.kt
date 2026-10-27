@@ -25,6 +25,7 @@ class MainActivity : FlutterActivity() {
         const val REQUEST_OVERLAY_PERMISSION = 1003
         const val REQUEST_AUDIO_PERMISSION = 1004
         const val REQUEST_NOTIFICATION_PERMISSION = 1005
+        const val REQUEST_CAMERA_PERMISSION = 1006
         const val REQUEST_MEDIA_PROJECTION = 1001
     }
 
@@ -33,6 +34,7 @@ class MainActivity : FlutterActivity() {
     private var pendingStartResult: MethodChannel.Result? = null
     private var pendingRecordingsResult: MethodChannel.Result? = null
     private var pendingOverlayResult: MethodChannel.Result? = null
+    private var pendingCameraPermissionResult: MethodChannel.Result? = null
     private var pendingAudioCall: MethodCall? = null
     private var isRecording = false
     private var isPaused = false
@@ -77,6 +79,7 @@ class MainActivity : FlutterActivity() {
                 "setFloatingControls" -> handleFloatingControls(call, result)
                 "getVideoCapabilities" -> handleGetVideoCapabilities(result)
                 "requestOverlayPermission" -> handleOverlayPermission(result)
+                "requestCameraPermission" -> handleCameraPermission(result)
                 else -> result.notImplemented()
             }
         }
@@ -120,6 +123,19 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun handleCameraPermission(result: MethodChannel.Result) {
+        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            result.success(true)
+            return
+        }
+        if (pendingCameraPermissionResult != null) {
+            result.error("PERMISSION_PENDING", "A permissão da câmera já está sendo solicitada.", null)
+            return
+        }
+        pendingCameraPermissionResult = result
+        requestPermissions(arrayOf(Manifest.permission.CAMERA), REQUEST_CAMERA_PERMISSION)
+    }
+
     private fun handleStartRecording(call: MethodCall, result: MethodChannel.Result) {
         if (isRecording || pendingStartResult != null) {
             result.success(mapOf("success" to false, "message" to "Já existe uma gravação em andamento."))
@@ -140,6 +156,17 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun prepareStartRecording(call: MethodCall, result: MethodChannel.Result) {
+        if (call.argument<Boolean>("frontCameraEnabled") == true &&
+            checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingAudioCall = call
+            pendingStartResult = result
+            requestPermissions(
+                arrayOf(Manifest.permission.CAMERA),
+                REQUEST_CAMERA_PERMISSION,
+            )
+            return
+        }
         val audioMode = call.argument<String>("audioMode") ?: "both"
         if ((audioMode == "both" || audioMode == "microphone" || audioMode == "Microfone") &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
@@ -181,6 +208,10 @@ class MainActivity : FlutterActivity() {
             "codec" to (call.argument<String>("codec") ?: "h264"),
             "orientation" to (call.argument<String>("orientation") ?: "auto"),
             "bitratePreset" to (call.argument<String>("bitratePreset") ?: "custom"),
+            "frontCameraEnabled" to (call.argument<Boolean>("frontCameraEnabled") ?: false),
+            "cameraShape" to (call.argument<String>("cameraShape") ?: "circle"),
+            "cameraBorderColor" to (call.argument<Int>("cameraBorderColor") ?: android.graphics.Color.WHITE),
+            "cameraBorderWidthDp" to (call.argument<Int>("cameraBorderWidthDp") ?: 3).coerceIn(0, 12),
         )
         persistRecordingParams(pendingParams!!)
 
@@ -208,6 +239,10 @@ class MainActivity : FlutterActivity() {
             .putString("codec", params["codec"] as? String ?: "h264")
             .putString("orientation", params["orientation"] as? String ?: "auto")
             .putString("bitratePreset", params["bitratePreset"] as? String ?: "custom")
+            .putBoolean("frontCameraEnabled", params["frontCameraEnabled"] as? Boolean ?: false)
+            .putString("cameraShape", params["cameraShape"] as? String ?: "circle")
+            .putInt("cameraBorderColor", params["cameraBorderColor"] as? Int ?: android.graphics.Color.WHITE)
+            .putInt("cameraBorderWidthDp", params["cameraBorderWidthDp"] as? Int ?: 3)
             .apply()
         }
 
@@ -260,7 +295,17 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun handleGetStatus(result: MethodChannel.Result) {
-        result.success(mapOf("success" to true, "recording" to isRecording, "paused" to isPaused))
+        val state = RecordingService.currentStatus()
+        isRecording = state == "recording" || state == "paused"
+        isPaused = state == "paused"
+        result.success(
+            mapOf(
+                "success" to true,
+                "recording" to isRecording,
+                "paused" to isPaused,
+                "elapsedSeconds" to RecordingService.currentElapsedSeconds(),
+            ),
+        )
     }
 
     private fun handleGetRecordings(result: MethodChannel.Result) {
@@ -427,6 +472,10 @@ class MainActivity : FlutterActivity() {
             "codec" to (call.argument<String>("codec") ?: "h264"),
             "orientation" to (call.argument<String>("orientation") ?: "auto"),
             "bitratePreset" to (call.argument<String>("bitratePreset") ?: "custom"),
+            "frontCameraEnabled" to (call.argument<Boolean>("frontCameraEnabled") ?: false),
+            "cameraShape" to (call.argument<String>("cameraShape") ?: "circle"),
+            "cameraBorderColor" to (call.argument<Int>("cameraBorderColor") ?: android.graphics.Color.WHITE),
+            "cameraBorderWidthDp" to (call.argument<Int>("cameraBorderWidthDp") ?: 3).coerceIn(0, 12),
         )
         persistRecordingParams(params)
         if (!enabled) {
@@ -535,6 +584,50 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_MEDIA_PROJECTION) {
+            val result = pendingStartResult
+            pendingStartResult = null
+            val params = pendingParams
+            pendingParams = null
+            if (resultCode != RESULT_OK || data == null || result == null || params == null) {
+                result?.success(
+                    mapOf(
+                        "success" to false,
+                        "message" to "A permissão para capturar a tela foi cancelada.",
+                    ),
+                )
+                return
+            }
+            val serviceIntent = Intent(this, RecordingService::class.java).apply {
+                action = RecordingService.ACTION_START
+                putExtra(RecordingService.EXTRA_RESULT_CODE, resultCode)
+                putExtra(RecordingService.EXTRA_DATA, data)
+                params.forEach { (key, value) ->
+                    when (value) {
+                        is String -> putExtra(key, value)
+                        is Int -> putExtra(key, value)
+                        is Boolean -> putExtra(key, value)
+                        is Double -> putExtra(key, value)
+                    }
+                }
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+                result.success(mapOf("success" to true, "message" to "Preparando gravação."))
+            } catch (error: Exception) {
+                result.success(
+                    mapOf(
+                        "success" to false,
+                        "message" to (error.message ?: "Não foi possível iniciar a gravação."),
+                    ),
+                )
+            }
+            return
+        }
         if (requestCode == REQUEST_OVERLAY_PERMISSION) {
             val result = pendingOverlayResult
             pendingOverlayResult = null
@@ -588,6 +681,28 @@ class MainActivity : FlutterActivity() {
                     "Permita o acesso a vídeos para mostrar suas gravações.",
                     null,
                 )
+            }
+        } else if (requestCode == REQUEST_CAMERA_PERMISSION) {
+            val permissionGranted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+            pendingCameraPermissionResult?.let { result ->
+                pendingCameraPermissionResult = null
+                result.success(permissionGranted)
+            }
+            val call = pendingAudioCall
+            val result = pendingStartResult
+            pendingAudioCall = null
+            pendingStartResult = null
+            if (call != null && result != null) {
+                if (permissionGranted) {
+                    prepareStartRecording(call, result)
+                } else {
+                    result.success(
+                        mapOf(
+                            "success" to false,
+                            "message" to "Permita o acesso à câmera frontal para incluí-la no vídeo.",
+                        ),
+                    )
+                }
             }
         }
     }

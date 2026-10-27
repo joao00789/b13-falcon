@@ -95,6 +95,32 @@ class CaptureConsentActivity : Activity() {
                     "sourceHeight",
                     intent.getIntExtra("sourceHeight", 0),
                 )
+                putExtra(
+                    "frontCameraEnabled",
+                    intent.getBooleanExtra(
+                        "frontCameraEnabled",
+                        preferences.getBoolean("frontCameraEnabled", false),
+                    ),
+                )
+                putExtra(
+                    "cameraShape",
+                    intent.getStringExtra("cameraShape")
+                        ?: preferences.getString("cameraShape", "circle"),
+                )
+                putExtra(
+                    "cameraBorderColor",
+                    intent.getIntExtra(
+                        "cameraBorderColor",
+                        preferences.getInt("cameraBorderColor", android.graphics.Color.WHITE),
+                    ),
+                )
+                putExtra(
+                    "cameraBorderWidthDp",
+                    intent.getIntExtra(
+                        "cameraBorderWidthDp",
+                        preferences.getInt("cameraBorderWidthDp", 3),
+                    ),
+                )
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

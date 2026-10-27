@@ -26,12 +26,11 @@ class LibraryPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          onPressed: onBack,
-          tooltip: 'Voltar para início',
-          icon: const Icon(Icons.arrow_back_rounded),
+        automaticallyImplyLeading: false,
+        title: const Align(
+          alignment: Alignment.centerLeft,
+          child: Text('Vídeos'),
         ),
-        title: const Text('Biblioteca'),
         actions: [
           IconButton(
             onPressed: onRefresh,
@@ -47,7 +46,7 @@ class LibraryPage extends StatelessWidget {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(24),
                 children: [
-                  const SizedBox(height: 80),
+                  SizedBox(height: MediaQuery.sizeOf(context).height * 0.22),
                   EntranceAnimation(
                     child: Column(
                       children: [
@@ -83,13 +82,13 @@ class LibraryPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 18),
                         Text(
-                          'Nenhum vídeo salvo ainda.',
+                          'Nenhum vídeo',
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 6),
                         const Text(
-                          'As gravações concluídas aparecerão nesta biblioteca.',
+                          'Toque no botão para abrir os controles.',
                           textAlign: TextAlign.center,
                         ),
                       ],

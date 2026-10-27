@@ -3,12 +3,13 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual: `1.2.5+17`; branch `main`; a versão `v1.2.3` é a última release publicada.
+- Versão atual em desenvolvimento: `1.2.6+18`; branch `main`; `v1.2.5` é a última release publicada.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
-- `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos e configuração do overlay.
+- `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos, configuração do overlay e consentimento MediaProjection quando a gravação começa no app.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
 - `FloatingControlsService` mantém o overlay e envia ações de gravar/pausar/retomar/parar e desenho.
 - `RecordingService` é o serviço em primeiro plano que controla MediaProjection, VirtualDisplay, MediaCodec, captura/mixagem de áudio, MediaMuxer e publicação MP4 via MediaStore em `Movies/B13 Falcon`.
+- Quando a câmera frontal está habilitada, `ScreenCameraCompositor` combina a imagem do VirtualDisplay e a textura da câmera frontal via Camera2/EGL/GLES antes de enviar os quadros ao encoder; a sobreposição fica incorporada no MP4.
 - Broadcasts do `RecordingService` comunicam `recording`, `paused`, `stopped` e `error` à interface e ao overlay.
 
 ### Fluxos
@@ -34,6 +35,10 @@
 - `audioMode`: `both | internal | microphone | none`; valores legados em português são normalizados.
 - A captura de áudio interno exige Android 10+ e pode ser bloqueada pela aplicação capturada. Microfone exige `RECORD_AUDIO`.
 - `themeAccent` seleciona os temas animados Falcon, Ocean, Emerald ou Violet; animações respeitam a preferência de reduzir movimento do sistema.
+- `frontCameraEnabled`: `true | false`; requer permissão `CAMERA`.
+- `cameraShape`: `circle | rounded`.
+- `cameraBorderColor`: branco (`#FFFFFFFF`), Falcon (`#FFB81C2B`), Ocean (`#FF168AAD`), Emerald (`#FF16865A`), Violet (`#FF7950B8`) ou Black (`#FFC9A85A`).
+- `cameraBorderWidthDp`: 0 a 12 dp.
 
 ## Funcionalidades atuais
 
@@ -42,9 +47,23 @@
 - Ferramentas flutuantes de desenho: traço livre, caixa, círculo, cores, espessura/opacidade, desfazer e limpar.
 - Biblioteca MediaStore com listar, abrir via reprodutor externo e excluir gravações.
 - Preferências persistidas localmente em `SharedPreferences`.
+- Câmera frontal composta no vídeo, com formato circular/cantos arredondados e borda colorida ajustável.
+- Abas inferiores Vídeos, Capturas, Ajustes e Ajuda; as notificações oferecem Iniciar quando ocioso e Pausar/Retomar e Pincel durante a gravação.
 - Lucide SVGs e licença ISC em `assets/icons/lucide/`; drawables vetoriais Android equivalentes em `android/app/src/main/res/drawable/`.
 
 ## Changelog (cronológico)
+
+### 2026-10-26 — Câmera frontal, controles de notificação e navegação
+
+- Adicionadas preferências e controles para incluir a câmera frontal no MP4, escolher formato e personalizar cor/espessura da borda.
+- Criado `ScreenCameraCompositor` para compor a projeção de tela e a câmera frontal na superfície do encoder; a retomada reconecta a superfície do compositor.
+- Corrigido o recorte da textura da câmera para preservar a proporção dentro da janela quadrada e liberados os recursos EGL/texturas no encerramento do compositor.
+- Adicionadas ações de notificação para iniciar, pausar/retomar e usar o pincel; o overlay tem canal visível em prioridade baixa e mantém a opacidade zero sem remover a área tocável.
+- Reorganizada a navegação em Vídeos, Capturas, Ajustes e Ajuda; persistidos os ajustes da câmera no caminho Flutter/MethodChannel/Android.
+- O estado e o tempo ativo da sessão agora são consultados no serviço quando a interface reabre, e o overlay recupera o estado atual ao ser criado.
+- Corrigida a posição do handler de permissão de câmera em `MainActivity`; removidos `READ_MEDIA_AUDIO`, `READ_MEDIA_VIDEO` e `requestLegacyExternalStorage`, e corrigida a posição da declaração `uses-feature`.
+- Atualizada a versão para `1.2.6+18`.
+- Arquivos: `CONTEXTO.md`, `pubspec.yaml`, `android/app/src/main/AndroidManifest.xml`, `android/app/src/main/kotlin/com/b13/falcon/{CaptureConsentActivity,FloatingControlsService,MainActivity,RecordingService,ScreenCameraCompositor}.kt`, `lib/app.dart`, `lib/data/models/app_settings.dart`, `lib/features/{home/home_page,library/library_page,settings/settings_page,help/help_page}.dart`, `lib/services/native_recorder.dart` e `test/widget_test.dart`.
 
 ### 2026-10-26 — Ajustes finais de estabilidade e refinamento do tema
 
@@ -123,22 +142,29 @@
 
 ## Decisões e limitações conhecidas
 
+- A câmera frontal usa uma janela fixa no canto inferior direito, com aproximadamente 27% da menor dimensão do vídeo; posição/tamanho da janela ainda não são configuráveis. A rotação/aspecto e o desempenho dependem do sensor, encoder e GPU do aparelho.
+- A composição EGL/Camera2 ainda não foi compilada nem validada em aparelho neste ambiente; o Android SDK não está instalado localmente.
+- A publicação ainda não foi disparada: a tag só deve ser criada depois do build Android e do teste físico, com os secrets `B13_RELEASE_KEYSTORE_BASE64`, `B13_RELEASE_STORE_PASSWORD`, `B13_RELEASE_KEY_ALIAS` e `B13_RELEASE_KEY_PASSWORD` disponíveis no GitHub.
+- A aba Capturas é a tela de controles de gravação; ainda não há fluxo separado para salvar capturas estáticas em PNG/JPEG.
 - MediaProjection exige consentimento do usuário em cada nova sessão; o overlay não pode reutilizar consentimento anterior.
 - Suporte a resolução/FPS/codec depende do aparelho e do encoder; o formato efetivo deve ser informado na interface quando limitado.
 - Mudança de orientação durante uma gravação não redimensiona o encoder; a orientação é escolhida no início.
 - A captura de áudio interno continua condicionada ao Android e às políticas do jogo/aplicativo de origem.
 - Testes Flutter não exercitam MediaProjection, Android services, codecs nem sobreposições. O ambiente de desenvolvimento pode não ter Android SDK; o CI é responsável pelo build nativo.
 - A assinatura release depende da keystore PKCS12 e dos quatro secrets do repositório; a keystore local não deve ser versionada nem publicada.
-- O estado da gravação ainda tem cópia local na Activity; o serviço/broadcast é a fonte operacional durante a sessão.
+- A Activity e Flutter mantêm cópias visuais do estado; `RecordingService` é a fonte da verdade no processo e os broadcasts sincronizam as telas.
 
 ## Pendências
 
-- Validar em aparelho o início pelo overlay sem trazer o app à frente e a orientação em jogo horizontal.
+- Validar em aparelho o início pelo overlay sem trazer o app à frente, a orientação em jogo horizontal e a câmera frontal incorporada no MP4.
+- Testar bordas, pausa/retomada e uso simultâneo da notificação e overlay em aparelhos Android 10+.
+- Decidir/implementar a captura estática de tela; por enquanto a aba Capturas controla a gravação de vídeo.
 - Verificar timestamps, mixagem/ganhos de áudio, limite de amostras pendentes e limpeza de saída em falha.
-- Confirmar que o workflow da tag `v1.2.3` publica os APKs assinados; validar uma atualização sobre instalação anterior no aparelho.
+- Confirmar que o workflow publica APKs assinados; validar uma atualização sobre instalação anterior no aparelho.
+- Antes da release: compilar `flutter build apk --debug`, confirmar build/testes, adicionar os quatro secrets de assinatura no repositório, validar o workflow e então criar/enviar uma tag de versão.
 - Validar POST_NOTIFICATIONS no Android 13+, tamanho/qualidade e compatibilidade de codecs em aparelhos reais.
 - Se o crash persistir, recolher o stack trace do Android/logcat para confirmar a causa específica; as duas causas acima são cenários plausíveis, não diagnóstico confirmado sem log do aparelho.
-- Concluir limpeza de permissões antigas e componentes não usados, após confirmar a consulta da biblioteca em cada versão Android suportada.
+- Confirmar a consulta da biblioteca em cada versão Android suportada após remover permissões amplas de mídia.
 
 ## Comandos de validação
 

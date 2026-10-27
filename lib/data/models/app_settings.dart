@@ -16,6 +16,10 @@ class AppSettings {
     this.codec = 'h264',
     this.orientation = 'auto',
     this.bitratePreset = 'custom',
+    this.frontCameraEnabled = false,
+    this.cameraShape = 'circle',
+    this.cameraBorderColor = -1,
+    this.cameraBorderWidthDp = 3,
   });
 
   static String normalizeAudioMode(Object? value) {
@@ -48,6 +52,15 @@ class AppSettings {
     'arctic',
     'black',
   };
+  static const _validCameraShapes = {'circle', 'rounded'};
+  static const _validCameraBorderColors = {
+    -1,
+    0xFFB81C2B - 0x100000000,
+    0xFF168AAD - 0x100000000,
+    0xFF16865A - 0x100000000,
+    0xFF7950B8 - 0x100000000,
+    0xFFC9A85A - 0x100000000,
+  };
 
   static int _readInt(Object? value, int fallback) =>
       value is num && value.isFinite ? value.round() : fallback;
@@ -72,6 +85,10 @@ class AppSettings {
   final String codec;
   final String orientation;
   final String bitratePreset;
+  final bool frontCameraEnabled;
+  final String cameraShape;
+  final int cameraBorderColor;
+  final int cameraBorderWidthDp;
 
   AppSettings copyWith({
     bool? isDarkMode,
@@ -88,6 +105,10 @@ class AppSettings {
     String? codec,
     String? orientation,
     String? bitratePreset,
+    bool? frontCameraEnabled,
+    String? cameraShape,
+    int? cameraBorderColor,
+    int? cameraBorderWidthDp,
   }) {
     return AppSettings(
       isDarkMode: isDarkMode ?? this.isDarkMode,
@@ -104,6 +125,10 @@ class AppSettings {
       codec: codec ?? this.codec,
       orientation: orientation ?? this.orientation,
       bitratePreset: bitratePreset ?? this.bitratePreset,
+      frontCameraEnabled: frontCameraEnabled ?? this.frontCameraEnabled,
+      cameraShape: cameraShape ?? this.cameraShape,
+      cameraBorderColor: cameraBorderColor ?? this.cameraBorderColor,
+      cameraBorderWidthDp: cameraBorderWidthDp ?? this.cameraBorderWidthDp,
     );
   }
 
@@ -135,6 +160,10 @@ class AppSettings {
     'codec': codec,
     'orientation': orientation,
     'bitratePreset': bitratePreset,
+    'frontCameraEnabled': frontCameraEnabled,
+    'cameraShape': cameraShape,
+    'cameraBorderColor': cameraBorderColor,
+    'cameraBorderWidthDp': cameraBorderWidthDp,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -147,6 +176,12 @@ class AppSettings {
         : 0.85;
     final size = _readInt(json['floatingLogoSizeDp'], 56);
     final bitrate = _readInt(json['bitrateKbps'], 16000);
+    final cameraShape = _readString(json['cameraShape'], 'circle');
+    final cameraBorderColor = _readInt(
+      json['cameraBorderColor'],
+      -1,
+    ).toSigned(32);
+    final cameraBorderWidthDp = _readInt(json['cameraBorderWidthDp'], 3);
 
     return AppSettings(
       isDarkMode: _readBool(json['isDarkMode'], true),
@@ -174,6 +209,14 @@ class AppSettings {
         'maximum' => json['bitratePreset'] as String,
         _ => 'custom',
       },
+      frontCameraEnabled: _readBool(json['frontCameraEnabled'], false),
+      cameraShape: _validCameraShapes.contains(cameraShape)
+          ? cameraShape
+          : 'circle',
+      cameraBorderColor: _validCameraBorderColors.contains(cameraBorderColor)
+          ? cameraBorderColor
+          : -1,
+      cameraBorderWidthDp: cameraBorderWidthDp.clamp(0, 12).toInt(),
     );
   }
 }
