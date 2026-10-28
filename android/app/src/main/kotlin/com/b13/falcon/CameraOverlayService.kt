@@ -12,21 +12,30 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
+import android.content.res.Configuration
+import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import java.io.IOException
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
+import kotlin.math.hypot
+import kotlin.math.roundToInt
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -41,8 +50,9 @@ class CameraOverlayService : LifecycleService() {
         const val ACTION_SHOW = "com.b13.falcon.camera.SHOW"
         const val ACTION_HIDE = "com.b13.falcon.camera.HIDE"
         const val ACTION_STOP = "com.b13.falcon.camera.STOP"
+        const val ACTION_TOGGLE_LOCK = "com.b13.falcon.camera.TOGGLE_LOCK"
         private const val CHANNEL_ID = "b13_falcon_camera"
-        private const val NOTIFICATION_ID = 102
+        private const val NOTIFICATION_ID = 103
     }
 
     private lateinit var windowManager: WindowManager
@@ -50,6 +60,7 @@ class CameraOverlayService : LifecycleService() {
     private var cameraProvider: ProcessCameraProvider? = null
     private var previewView: PreviewView? = null
     private var imageView: ImageView? = null
+    private var cameraLockButton: TextView? = null
     private var previewFrame: CameraFrameView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var cameraUseCase: Preview? = null
@@ -73,6 +84,14 @@ class CameraOverlayService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
             ACTION_STOP, ACTION_HIDE -> stopOverlay()
+            ACTION_TOGGLE_LOCK -> {
+                config = CameraOverlayConfig.fromJson(
+                    CameraOverlayConfig.loadFromPreferences(
+                        getSharedPreferences("b13_falcon_recording", MODE_PRIVATE),
+                    ),
+                )
+                setCameraLocked(!config.locked)
+            }
             ACTION_SHOW, ACTION_UPDATE -> {
                 val json = intent.getStringExtra("cameraConfigJson")
                     ?: CameraOverlayConfig.loadFromPreferences(
@@ -237,8 +256,12 @@ class CameraOverlayService : LifecycleService() {
             layoutParams?.let { params ->
                 params.width = sizePx
                 params.height = sizePx
+                clampPosition(params)
                 windowManager.updateViewLayout(previewFrame, params)
             }
+            previewView?.scaleX = if (config.mirror) -1f else 1f
+            cameraLockButton?.text = lockButtonLabel()
+            updateWindowTouchability()
             return
         }
 
@@ -251,23 +274,32 @@ class CameraOverlayService : LifecycleService() {
             scaleType = ImageView.ScaleType.CENTER_CROP
             visibility = View.GONE
         }
-        val frame = CameraFrameView(this).apply {
-            elevation = dp(12).toFloat()
-            addView(
-                view,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                ),
-            )
-            addView(
-                image,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                ),
-            )
-        }
+        val frame = CameraFrameView(this).apply { elevation = dp(12).toFloat() }
+        frame.addView(
+            view,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        frame.addView(
+            image,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        val toolbar = createCameraToolbar()
+        frame.addView(
+            toolbar,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                dp(32),
+                Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+            ).apply {
+                topMargin = dp(4)
+            },
+        )
         val params = WindowManager.LayoutParams(
             sizePx,
             sizePx,
@@ -279,22 +311,107 @@ class CameraOverlayService : LifecycleService() {
             },
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = (config.xFraction * (screenWidth() - sizePx).coerceAtLeast(0)).toInt()
-            y = (config.yFraction * (screenHeight() - sizePx).coerceAtLeast(0)).toInt()
+            val bounds = usableBounds()
+            x = bounds.left +
+                (config.xFraction * (bounds.width() - sizePx).coerceAtLeast(0)).roundToInt()
+            y = bounds.top +
+                (config.yFraction * (bounds.height() - sizePx).coerceAtLeast(0)).roundToInt()
         }
         frame.setOnTouchListener(createDragListener(frame, params))
+        view.scaleX = if (config.mirror) -1f else 1f
         previewView = view
         imageView = image
+        cameraLockButton = toolbar.getChildAt(1) as? TextView
         previewFrame = frame
         layoutParams = params
         applyFrameStyle()
+        updateWindowTouchability()
         windowManager.addView(frame, params)
         overlayAdded = true
+    }
+
+    private fun createCameraToolbar(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+        setPadding(dp(3), dp(2), dp(3), dp(2))
+        background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(0xCC111820.toInt())
+            cornerRadius = dp(18).toFloat()
+        }
+        addView(createToolbarButton("−", "Diminuir tamanho da facecam") {
+            resizeCamera(-12)
+        })
+        addView(createToolbarButton(lockButtonLabel(), "Travar ou destravar posição da facecam") {
+            setCameraLocked(!config.locked)
+        }.also { cameraLockButton = it })
+        addView(createToolbarButton("+", "Aumentar tamanho da facecam") {
+            resizeCamera(12)
+        })
+    }
+
+    private fun createToolbarButton(
+        label: String,
+        description: String,
+        onClick: () -> Unit,
+    ): TextView = TextView(this).apply {
+        text = label
+        contentDescription = description
+        gravity = Gravity.CENTER
+        textSize = 17f
+        setTextColor(Color.WHITE)
+        setPadding(dp(8), 0, dp(8), 0)
+        setOnClickListener { onClick() }
+    }
+
+    private fun lockButtonLabel(): String = if (config.locked) "🔒" else "🔓"
+
+    private fun setCameraLocked(locked: Boolean) {
+        config = config.copy(locked = locked)
+        persistConfig()
+        cameraLockButton?.apply {
+            text = lockButtonLabel()
+            contentDescription = if (locked) {
+                "Posição travada. Use a notificação ou os controles flutuantes para destravar."
+            } else {
+                "Travar posição da facecam"
+            }
+        }
+        updateWindowTouchability()
+        startCameraForeground(useCamera = config.imageUri.isNullOrBlank())
+    }
+
+    private fun updateWindowTouchability() {
+        val params = layoutParams ?: return
+        params.flags = if (config.locked) {
+            params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        } else {
+            params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        }
+        if (overlayAdded) {
+            runCatching { windowManager.updateViewLayout(previewFrame, params) }
+                .onFailure {
+                    android.util.Log.w(
+                        "B13FalconCamera",
+                        "Não foi possível atualizar o bloqueio da facecam.",
+                        it,
+                    )
+                }
+        }
+    }
+
+    private fun resizeCamera(deltaDp: Int) {
+        config = config.copy(sizeDp = (config.sizeDp + deltaDp).coerceIn(80, 260))
+        layoutParams?.let { params ->
+            params.width = dp(config.sizeDp)
+            params.height = dp(config.sizeDp)
+            clampPosition(params)
+            if (overlayAdded) windowManager.updateViewLayout(previewFrame, params)
+        }
+        persistConfig()
     }
 
     private fun applyFrameStyle() {
@@ -310,42 +427,81 @@ class CameraOverlayService : LifecycleService() {
         var startRawY = 0f
         var startX = 0
         var startY = 0
+        var dragging = false
+        var pinching = false
+        var pinchStartDistance = 0f
+        var pinchStartSizeDp = config.sizeDp
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
         return View.OnTouchListener { _, event ->
-            when (event.action) {
+            when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     startRawX = event.rawX
                     startRawY = event.rawY
                     startX = params.x
                     startY = params.y
+                    dragging = false
+                    pinching = false
+                    true
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    if (event.pointerCount >= 2) {
+                        pinching = true
+                        dragging = false
+                        pinchStartDistance = pointerDistance(event)
+                        pinchStartSizeDp = config.sizeDp
+                    }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    params.x = (startX + event.rawX - startRawX).toInt()
-                    params.y = (startY + event.rawY - startRawY).toInt()
-                    clampPosition(params)
-                    try {
+                    if (pinching && event.pointerCount >= 2) {
+                        val deltaDp = (pointerDistance(event) - pinchStartDistance) /
+                            resources.displayMetrics.density
+                        config = config.copy(
+                            sizeDp = (pinchStartSizeDp + deltaDp.roundToInt())
+                                .coerceIn(80, 260),
+                        )
+                        params.width = dp(config.sizeDp)
+                        params.height = dp(config.sizeDp)
+                        clampPosition(params)
                         windowManager.updateViewLayout(frame, params)
-                    } catch (error: WindowManager.BadTokenException) {
-                        failCamera("A janela flutuante da câmera foi desconectada.")
+                    } else {
+                        val deltaX = event.rawX - startRawX
+                        val deltaY = event.rawY - startRawY
+                        if (!dragging && hypot(deltaX, deltaY) >= touchSlop) {
+                            dragging = true
+                        }
+                        if (dragging) {
+                            params.x = (startX + deltaX).roundToInt()
+                            params.y = (startY + deltaY).roundToInt()
+                            clampPosition(params)
+                            windowManager.updateViewLayout(frame, params)
+                        }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_POINTER_UP -> {
+                    if (event.pointerCount <= 2) {
+                        pinching = false
+                        val remainingIndex = if (event.actionIndex == 0) 1 else 0
+                        if (remainingIndex < event.pointerCount) {
+                            startRawX = event.rawX + event.getX(remainingIndex) - event.getX(0)
+                            startRawY = event.rawY + event.getY(remainingIndex) - event.getY(0)
+                            startX = params.x
+                            startY = params.y
+                            dragging = false
+                        }
                     }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    val width = (params.width).coerceAtLeast(1)
-                    val height = (params.height).coerceAtLeast(1)
+                    val bounds = usableBounds()
                     config = config.copy(
-                        xFraction = params.x.toFloat() /
-                            (screenWidth() - width).coerceAtLeast(1),
-                        yFraction = params.y.toFloat() /
-                            (screenHeight() - height).coerceAtLeast(1),
+                        xFraction = (params.x - bounds.left).toFloat() /
+                            (bounds.width() - params.width).coerceAtLeast(1),
+                        yFraction = (params.y - bounds.top).toFloat() /
+                            (bounds.height() - params.height).coerceAtLeast(1),
                     )
-                    getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
-                        .edit()
-                        .putString(
-                            "cameraConfigJson",
-                            config.toJson(),
-                        )
-                        .apply()
+                    persistConfig()
                     true
                 }
                 else -> false
@@ -354,14 +510,56 @@ class CameraOverlayService : LifecycleService() {
     }
 
     private fun clampPosition(params: WindowManager.LayoutParams) {
+        val bounds = usableBounds()
         params.x = params.x.coerceIn(
-            0,
-            (screenWidth() - params.width).coerceAtLeast(0),
+            bounds.left,
+            (bounds.right - params.width).coerceAtLeast(bounds.left),
         )
         params.y = params.y.coerceIn(
-            0,
-            (screenHeight() - params.height).coerceAtLeast(0),
+            bounds.top,
+            (bounds.bottom - params.height).coerceAtLeast(bounds.top),
         )
+    }
+
+    private fun pointerDistance(event: MotionEvent): Float = hypot(
+        event.getX(0) - event.getX(1),
+        event.getY(0) - event.getY(1),
+    )
+
+    private fun persistConfig() {
+        getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
+            .edit()
+            .putString("cameraConfigJson", config.toJson())
+            .apply()
+    }
+
+    private fun usableBounds(): Rect {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val metrics = windowManager.currentWindowMetrics
+            return Rect(metrics.bounds).apply {
+                val insets = metrics.windowInsets.getInsets(
+                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
+                )
+                inset(insets.left, insets.top, insets.right, insets.bottom)
+            }
+        }
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        windowManager.defaultDisplay.getRealMetrics(metrics)
+        return Rect(0, 0, metrics.widthPixels, metrics.heightPixels)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        layoutParams?.let { params ->
+            val bounds = usableBounds()
+            params.x = bounds.left +
+                (config.xFraction * (bounds.width() - params.width).coerceAtLeast(0)).roundToInt()
+            params.y = bounds.top +
+                (config.yFraction * (bounds.height() - params.height).coerceAtLeast(0)).roundToInt()
+            clampPosition(params)
+            if (overlayAdded) windowManager.updateViewLayout(previewFrame, params)
+        }
     }
 
     private fun startCameraForeground(useCamera: Boolean) {
@@ -371,11 +569,22 @@ class CameraOverlayService : LifecycleService() {
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setOngoing(true)
             .addAction(
+                if (config.locked) android.R.drawable.ic_lock_idle_lock
+                else android.R.drawable.ic_lock_lock,
+                if (config.locked) "Destravar posição" else "Travar posição",
+                PendingIntent.getService(
+                    this,
+                    103,
+                    Intent(this, CameraOverlayService::class.java).setAction(ACTION_TOGGLE_LOCK),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
+            .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
                 "Ocultar",
                 PendingIntent.getService(
                     this,
-                    102,
+                    104,
                     Intent(this, CameraOverlayService::class.java).setAction(ACTION_HIDE),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 ),
@@ -427,6 +636,7 @@ class CameraOverlayService : LifecycleService() {
         previewFrame = null
         previewView = null
         imageView = null
+        cameraLockButton = null
         layoutParams = null
     }
 
@@ -441,10 +651,6 @@ class CameraOverlayService : LifecycleService() {
             )
         }
     }
-
-    private fun screenWidth(): Int = resources.displayMetrics.widthPixels
-
-    private fun screenHeight(): Int = resources.displayMetrics.heightPixels
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt().coerceAtLeast(1)

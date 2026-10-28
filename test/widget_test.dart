@@ -119,6 +119,11 @@ void main() {
       shape: 'square',
       borderStyle: 'gradient',
       nameTagText: 'B13 FALCON',
+      nameTagEnabled: true,
+      nameTagStyle: 'pill',
+      nameTagPosition: 'above',
+      mirror: false,
+      locked: true,
       imageUri: 'content://media/images/123',
     );
     final restored = CameraOverlaySettings.fromJson(camera.configJson);
@@ -128,6 +133,11 @@ void main() {
     expect(restored.shape, 'square');
     expect(restored.borderStyle, 'gradient');
     expect(restored.nameTagText, 'B13 FALCON');
+    expect(restored.nameTagEnabled, isTrue);
+    expect(restored.nameTagStyle, 'pill');
+    expect(restored.nameTagPosition, 'above');
+    expect(restored.mirror, isFalse);
+    expect(restored.locked, isTrue);
     expect(restored.imageUri, 'content://media/images/123');
     expect(restored.copyWith(clearImageUri: true).imageUri, isNull);
 

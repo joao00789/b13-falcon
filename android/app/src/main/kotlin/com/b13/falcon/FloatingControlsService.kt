@@ -43,6 +43,8 @@ class FloatingControlsService : Service() {
         const val ACTION_NOTIFICATION_START = "com.b13.falcon.overlay.NOTIFICATION_START"
         const val ACTION_NOTIFICATION_BRUSH = "com.b13.falcon.overlay.NOTIFICATION_BRUSH"
         const val ACTION_NOTIFICATION_PAUSE = "com.b13.falcon.overlay.NOTIFICATION_PAUSE"
+        const val ACTION_NOTIFICATION_CAMERA_LOCK =
+            "com.b13.falcon.overlay.NOTIFICATION_CAMERA_LOCK"
         private const val CHANNEL_ID = "b13_falcon_floating"
         private const val NOTIFICATION_ID = 102
     }
@@ -56,6 +58,7 @@ class FloatingControlsService : Service() {
     private var pauseButton: ImageView? = null
     private var drawButton: ImageView? = null
     private var stopButton: ImageView? = null
+    private var cameraLockButton: ImageView? = null
     private var overlayParams: WindowManager.LayoutParams? = null
     private var expanded = false
     private var bubbleDragged = false
@@ -162,6 +165,8 @@ class FloatingControlsService : Service() {
             sendRecordingAction(
                 if (paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE,
             )
+        } else if (intent?.action == ACTION_NOTIFICATION_CAMERA_LOCK) {
+            toggleCameraLock()
         } else if (intent?.action == ACTION_UPDATE_OPACITY) {
             updateLogoOpacity(intent)
         } else if (intent?.action == ACTION_UPDATE_SIZE) {
@@ -247,6 +252,12 @@ class FloatingControlsService : Service() {
             },
             buttonLayoutParams(),
         )
+        cameraLockButton = createIconButton(
+            cameraLockIcon(),
+            "Travar ou destravar posição da facecam",
+        ) {
+            toggleCameraLock()
+        }.also { buttons.addView(it, buttonLayoutParams()) }
         stopButton = createIconButton(R.drawable.ic_lucide_square, "Parar gravação") {
             sendRecordingAction(RecordingService.ACTION_STOP)
         }.also { buttons.addView(it, buttonLayoutParams()) }
@@ -552,7 +563,68 @@ class FloatingControlsService : Service() {
         }
         drawButton?.visibility = if (recording) View.VISIBLE else View.GONE
         stopButton?.visibility = if (recording) View.VISIBLE else View.GONE
+        cameraLockButton?.apply {
+            setImageResource(cameraLockIcon())
+            contentDescription = if (cameraIsLocked()) {
+                "Destravar posição da facecam"
+            } else {
+                "Travar posição da facecam"
+            }
+        }
         actionButtons?.visibility = if (expanded) View.VISIBLE else View.GONE
+    }
+
+    private fun cameraOverlayConfig(): CameraOverlayConfig =
+        CameraOverlayConfig.fromJson(
+            CameraOverlayConfig.loadFromPreferences(
+                getSharedPreferences("b13_falcon_recording", MODE_PRIVATE),
+            ),
+        )
+
+    private fun cameraIsLocked(): Boolean = cameraOverlayConfig().locked
+
+    private fun cameraLockIcon(): Int = if (cameraIsLocked()) {
+        android.R.drawable.ic_lock_idle_lock
+    } else {
+        android.R.drawable.ic_lock_lock
+    }
+
+    private fun toggleCameraLock() {
+        val config = cameraOverlayConfig()
+        if (!config.enabled || config.mode != "overlay") {
+            android.widget.Toast.makeText(
+                this,
+                "Ative a câmera flutuante antes de travar sua posição.",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val updatedConfig = config.copy(locked = !config.locked)
+        val json = updatedConfig.toJson()
+        getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
+            .edit()
+            .putString("cameraConfigJson", json)
+            .apply()
+        cameraLockButton?.apply {
+            setImageResource(if (updatedConfig.locked) {
+                android.R.drawable.ic_lock_idle_lock
+            } else {
+                android.R.drawable.ic_lock_lock
+            })
+            contentDescription = if (updatedConfig.locked) {
+                "Destravar posição da facecam"
+            } else {
+                "Travar posição da facecam"
+            }
+        }
+        val intent = Intent(this, CameraOverlayService::class.java)
+            .setAction(CameraOverlayService.ACTION_UPDATE)
+            .putExtra("cameraConfigJson", json)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
     }
 
     private fun updatePanelOpacity(touching: Boolean = false) {
@@ -721,6 +793,23 @@ class FloatingControlsService : Service() {
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setSilent(true)
+        val cameraConfig = cameraOverlayConfig()
+        if (cameraConfig.enabled && cameraConfig.mode == "overlay") {
+            val cameraLockIntent = PendingIntent.getService(
+                this,
+                6,
+                Intent(this, FloatingControlsService::class.java).apply {
+                    action = ACTION_NOTIFICATION_CAMERA_LOCK
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(
+                if (cameraConfig.locked) android.R.drawable.ic_lock_idle_lock
+                else android.R.drawable.ic_lock_lock,
+                if (cameraConfig.locked) "Destravar facecam" else "Travar facecam",
+                cameraLockIntent,
+            )
+        }
         if (recording) {
             val pauseIntent = PendingIntent.getService(
                 this,
@@ -781,6 +870,7 @@ class FloatingControlsService : Service() {
         pauseButton = null
         drawButton = null
         stopButton = null
+        cameraLockButton = null
         drawingView = null
         unregisterReceiver(recordingReceiver)
         super.onDestroy()

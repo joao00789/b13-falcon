@@ -569,6 +569,124 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ],
                   if (settings.cameraOverlay.enabled) ...[
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Espelhar câmera'),
+                      subtitle: const Text(
+                        'Inverte horizontalmente a prévia da câmera frontal.',
+                      ),
+                      value: settings.cameraOverlay.mirror,
+                      onChanged: (value) => onChanged(
+                        settings.copyWith(
+                          cameraOverlay: settings.cameraOverlay.copyWith(
+                            mirror: value,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Travar posição da facecam'),
+                      subtitle: const Text(
+                        'Impede toques e movimentos acidentais. Destrave pela '
+                        'notificação ou pelos controles flutuantes.',
+                      ),
+                      value: settings.cameraOverlay.locked,
+                      onChanged: (value) => onChanged(
+                        settings.copyWith(
+                          cameraOverlay: settings.cameraOverlay.copyWith(
+                            locked: value,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Mostrar faixa com nome'),
+                      value: settings.cameraOverlay.nameTagEnabled,
+                      onChanged: (value) => onChanged(
+                        settings.copyWith(
+                          cameraOverlay: settings.cameraOverlay.copyWith(
+                            nameTagEnabled: value,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (settings.cameraOverlay.nameTagEnabled) ...[
+                      TextFormField(
+                        initialValue: settings.cameraOverlay.nameTagText,
+                        maxLength: 24,
+                        decoration: const InputDecoration(
+                          labelText: 'Nome da faixa',
+                          hintText: 'Meu Canal',
+                        ),
+                        onChanged: (value) => onChanged(
+                          settings.copyWith(
+                            cameraOverlay: settings.cameraOverlay.copyWith(
+                              nameTagText: value,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Estilo da faixa',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        children:
+                            const [
+                              ('ribbon', 'Faixa'),
+                              ('pill', 'Pílula'),
+                              ('bar', 'Barra'),
+                            ].map((choice) {
+                              final (value, label) = choice;
+                              return ChoiceChip(
+                                label: Text(label),
+                                selected:
+                                    settings.cameraOverlay.nameTagStyle ==
+                                    value,
+                                onSelected: (_) => onChanged(
+                                  settings.copyWith(
+                                    cameraOverlay: settings.cameraOverlay
+                                        .copyWith(nameTagStyle: value),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Posição da faixa',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        children:
+                            const [
+                              ('above', 'Acima'),
+                              ('bottomOverlap', 'Sobreposta'),
+                              ('below', 'Abaixo'),
+                            ].map((choice) {
+                              final (value, label) = choice;
+                              return ChoiceChip(
+                                label: Text(label),
+                                selected:
+                                    settings.cameraOverlay.nameTagPosition ==
+                                    value,
+                                onSelected: (_) => onChanged(
+                                  settings.copyWith(
+                                    cameraOverlay: settings.cameraOverlay
+                                        .copyWith(nameTagPosition: value),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                      ),
+                    ],
+                  ],
+                  if (settings.cameraOverlay.enabled) ...[
                     const SizedBox(height: 4),
                     Text(
                       'Formato da câmera',

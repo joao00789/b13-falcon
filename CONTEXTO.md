@@ -3,7 +3,7 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual em desenvolvimento: `1.2.14+26`; branch `main`; `v1.2.13` é a última tag enviada ao GitHub.
+- Versão atual em desenvolvimento: `1.2.15+27`; branch `main`; `v1.2.14` é a última tag enviada ao GitHub.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
 - `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos, configuração do overlay e consentimento MediaProjection quando a gravação começa no app.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
@@ -49,12 +49,20 @@
 - Preferências persistidas localmente em `SharedPreferences`.
 - Câmera frontal com prévia CameraX em janela flutuante e compositor antigo preservado como alternativa `baked`; a inclusão da janela no vídeo requer validação em aparelho.
 - Opção de substituir a imagem ao vivo por uma imagem local na facecam, sem solicitar permissão de câmera; a câmera continua disponível como alternativa.
+- Facecam com espelhamento da prévia, faixa com nome configurável, trava de posição, barra rápida de tamanho, arrasto com tolerância e redimensionamento por pinça.
 - O fluxo iniciado pelo flutuante inicia a prévia da câmera após a solicitação de notificações; gravações iniciadas na tela inicial enviam dimensões reais do display ao serviço nativo.
 - Bordas da facecam personalizáveis entre estilos sólido, tracejado, duplo, gradiente e brilho; a cor aceita ajuste HSV, alfa e hexadecimal ARGB.
 - Abas inferiores Vídeos, Capturas, Ajustes e Ajuda; as notificações oferecem Iniciar quando ocioso e Pausar/Retomar e Pincel durante a gravação.
 - Lucide SVGs e licença ISC em `assets/icons/lucide/`; drawables vetoriais Android equivalentes em `android/app/src/main/res/drawable/`.
 
 ## Changelog (cronológico)
+
+### 2026-10-28 — Completa controles e interação da facecam
+
+- Separado o ID da notificação da câmera (`103`) dos controles (`102`) e IDs distintos para as ações da notificação.
+- A configuração nativa preserva a posição arrastada ao receber atualizações Flutter; o overlay tem tolerância de toque, redimensionamento por pinça e barra rápida de tamanho/trava.
+- Implementadas faixa com nome, espelhamento da prévia e trava por ajustes, barra, controles flutuantes e notificações; limites consideram rotação e recuos de barras/notch nas versões Android compatíveis.
+- Atualizada a versão para `1.2.15+27`; testes Flutter e compilação Android precisam ser executados para validar este incremento. A confirmação de captura visual ainda requer aparelho físico.
 
 ### 2026-10-27 — Corrige importação da imagem da facecam
 
@@ -99,7 +107,7 @@
 
 - Reduzido o tamanho padrão da janela da câmera para 136 dp e adicionado controle entre 100 e 200 dp nos Ajustes, persistido para gravações iniciadas pelo app ou pelo flutuante.
 - Aplicada moldura escura translúcida, contorno sutil na cor da borda selecionada, sombra e recorte correspondente ao formato escolhido.
-- Ao terminar de arrastar, a prévia se encaixa na lateral mais próxima e sua posição vertical é limitada à tela.
+- O arrasto salvava a posição normalizada e limitava a prévia à tela; não havia encaixe automático, redimensionamento por pinça nem tratamento consistente de barras/notch.
 - Atualizada a versão para `1.2.8+20`; a exibição final precisa ser conferida em aparelho Android.
 
 ### 2026-10-27 — Correção de orientação e prévia flutuante da câmera

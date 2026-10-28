@@ -370,19 +370,39 @@ class MainActivity : FlutterActivity() {
             result.error("INVALID_CAMERA_CONFIG", "A configuração da câmera está ausente.", null)
             return
         }
-        try {
+        val incomingConfig = try {
             CameraOverlayConfig.fromJson(cameraConfigJson)
         } catch (error: org.json.JSONException) {
             result.error("INVALID_CAMERA_CONFIG", "A configuração da câmera não é um JSON válido.", null)
             return
         }
         val preferences = getSharedPreferences("b13_falcon_recording", MODE_PRIVATE)
+        val savedConfig = preferences.getString("cameraConfigJson", null)
+            ?.let { savedJson ->
+                runCatching { CameraOverlayConfig.fromJson(savedJson) }
+                    .onFailure {
+                        android.util.Log.w(
+                            "B13FalconCamera",
+                            "Não foi possível ler a posição salva da facecam.",
+                            it,
+                        )
+                    }
+                    .getOrNull()
+            }
+        val config = if (savedConfig == null) {
+            incomingConfig
+        } else {
+            incomingConfig.copy(
+                xFraction = savedConfig.xFraction,
+                yFraction = savedConfig.yFraction,
+            )
+        }
+        val effectiveConfigJson = config.toJson()
         preferences
             .edit()
-            .putString("cameraConfigJson", cameraConfigJson)
+            .putString("cameraConfigJson", effectiveConfigJson)
             .apply()
         if (updateLive) {
-            val config = CameraOverlayConfig.fromJson(cameraConfigJson)
             if (config.enabled && config.mode == "overlay") {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
                     !Settings.canDrawOverlays(this)
@@ -407,7 +427,7 @@ class MainActivity : FlutterActivity() {
                 }
                 val serviceIntent = Intent(this, CameraOverlayService::class.java)
                     .setAction(CameraOverlayService.ACTION_UPDATE)
-                    .putExtra("cameraConfigJson", cameraConfigJson)
+                    .putExtra("cameraConfigJson", effectiveConfigJson)
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         startForegroundService(serviceIntent)
