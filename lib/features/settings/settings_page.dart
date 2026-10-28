@@ -11,6 +11,7 @@ class SettingsPage extends StatelessWidget {
     super.key,
     required this.settings,
     required this.onChanged,
+    required this.onPickCameraImage,
     required this.onReset,
     required this.onBack,
     required this.supportedResolutions,
@@ -22,6 +23,7 @@ class SettingsPage extends StatelessWidget {
 
   final AppSettings settings;
   final ValueChanged<AppSettings> onChanged;
+  final Future<String?> Function() onPickCameraImage;
   final VoidCallback onReset;
   final VoidCallback onBack;
   final List<String> supportedResolutions;
@@ -242,10 +244,36 @@ class SettingsPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Temas animados', style: theme.textTheme.titleMedium),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.palette_rounded,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Temas',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ),
+                      Text(
+                        '${AppThemeData.themes.length} estilos',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Escolha o visual que combina com suas gravações.',
+                    style: theme.textTheme.bodySmall,
+                  ),
                   const SizedBox(height: 12),
                   SizedBox(
-                    height: 190,
+                    height: 198,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: AppThemeData.themes.length,
@@ -306,8 +334,8 @@ class SettingsPage extends StatelessWidget {
                   Text('Áudio da gravação', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 6),
                   Text(
-                    'O áudio interno depende do Android 10+ e de o jogo permitir '
-                    'a captura. Alguns jogos podem bloqueá-la.',
+                    'O áudio interno depende do Android 10+ e pode ser bloqueado '
+                    'pelo jogo. Ajustes de ganho valem para as próximas gravações.',
                     style: theme.textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
@@ -333,6 +361,35 @@ class SettingsPage extends StatelessWidget {
                                 onChanged(settings.copyWith(audioMode: value)),
                           );
                         }).toList(),
+                  ),
+                  const SizedBox(height: 18),
+                  _AudioGainControl(
+                    label: 'Ganho do microfone',
+                    value: settings.microphoneGain,
+                    icon: Icons.mic_rounded,
+                    onChanged: (value) =>
+                        onChanged(settings.copyWith(microphoneGain: value)),
+                  ),
+                  _AudioGainControl(
+                    label: 'Volume do áudio do jogo',
+                    value: settings.gameAudioGain,
+                    icon: Icons.sports_esports_rounded,
+                    onChanged: (value) =>
+                        onChanged(settings.copyWith(gameAudioGain: value)),
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Redução de ruído do microfone'),
+                      subtitle: const Text(
+                        'Usa o filtro de ruído do aparelho quando disponível.',
+                      ),
+                      value: settings.microphoneNoiseSuppression,
+                      onChanged: (value) => onChanged(
+                        settings.copyWith(microphoneNoiseSuppression: value),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -424,28 +481,93 @@ class SettingsPage extends StatelessWidget {
                   Text('Câmera frontal', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 4),
                   Text(
-                    'Inclua sua câmera no vídeo gravado. A composição usa o '
-                    'encoder do aparelho e também mostra uma prévia flutuante '
-                    'sobre outros apps; exige permissão de sobreposição e pode '
-                    'reduzir o FPS em modelos mais fracos.',
+                    'Use sua câmera ao vivo ou uma imagem fixa no espaço da '
+                    'facecam. A sobreposição exige permissão para aparecer '
+                    'sobre outros apps.',
                     style: theme.textTheme.bodySmall,
                   ),
                   const SizedBox(height: 10),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Gravar câmera frontal'),
-                    subtitle: const Text(
-                      'A imagem será incorporada ao MP4, não apenas exibida na tela.',
-                    ),
-                    value: settings.cameraOverlay.enabled,
-                    onChanged: (value) => onChanged(
-                      settings.copyWith(
-                        cameraOverlay: settings.cameraOverlay.copyWith(
-                          enabled: value,
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Gravar câmera frontal'),
+                      subtitle: const Text(
+                        'A imagem será incorporada ao MP4, não apenas exibida na tela.',
+                      ),
+                      value: settings.cameraOverlay.enabled,
+                      onChanged: (value) => onChanged(
+                        settings.copyWith(
+                          cameraOverlay: settings.cameraOverlay.copyWith(
+                            enabled: value,
+                          ),
                         ),
                       ),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Conteúdo da facecam',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ChoiceChip(
+                        avatar: const Icon(Icons.videocam_rounded, size: 18),
+                        label: const Text('Câmera ao vivo'),
+                        selected: settings.cameraOverlay.imageUri == null,
+                        onSelected: (_) => onChanged(
+                          settings.copyWith(
+                            cameraOverlay: settings.cameraOverlay.copyWith(
+                              clearImageUri: true,
+                            ),
+                          ),
+                        ),
+                      ),
+                      ChoiceChip(
+                        avatar: const Icon(Icons.image_rounded, size: 18),
+                        label: const Text('Minha imagem'),
+                        selected: settings.cameraOverlay.imageUri != null,
+                        onSelected: (_) async {
+                          final imageUri = await onPickCameraImage();
+                          if (imageUri == null) return;
+                          onChanged(
+                            settings.copyWith(
+                              cameraOverlay: settings.cameraOverlay.copyWith(
+                                imageUri: imageUri,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  if (settings.cameraOverlay.imageUri != null) ...[
+                    const SizedBox(height: 4),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final imageUri = await onPickCameraImage();
+                        if (imageUri == null) return;
+                        onChanged(
+                          settings.copyWith(
+                            cameraOverlay: settings.cameraOverlay.copyWith(
+                              imageUri: imageUri,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Escolher outra imagem'),
+                    ),
+                    Text(
+                      'A imagem fica salva no aparelho e usa o mesmo formato '
+                      'e posição da facecam.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
                   if (settings.cameraOverlay.enabled) ...[
                     const SizedBox(height: 4),
                     Text(
@@ -909,6 +1031,46 @@ class SettingsPage extends StatelessWidget {
         sourceWidth: sourceWidth,
         sourceHeight: sourceHeight,
       ),
+    );
+  }
+}
+
+class _AudioGainControl extends StatelessWidget {
+  const _AudioGainControl({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final IconData icon;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final percentage = (value * 100).round();
+    return Column(
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 18, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Expanded(child: Text(label, style: theme.textTheme.titleSmall)),
+            Text('$percentage%'),
+          ],
+        ),
+        Slider(
+          min: 0,
+          max: 2,
+          divisions: 20,
+          value: value.clamp(0, 2).toDouble(),
+          label: '$percentage%',
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 }

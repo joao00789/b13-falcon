@@ -23,6 +23,7 @@ internal data class CameraOverlayConfig(
     val nameTagTextColor: Int,
     val nameTagFont: String,
     val nameTagPosition: String,
+    val imageUri: String?,
     val xFraction: Float,
     val yFraction: Float,
     val locked: Boolean,
@@ -54,6 +55,7 @@ internal data class CameraOverlayConfig(
                 .put("font", nameTagFont)
                 .put("position", nameTagPosition),
         )
+        .put("imageUri", imageUri ?: "")
         .put(
             "position",
             JSONObject()
@@ -109,6 +111,8 @@ internal data class CameraOverlayConfig(
                 nameTagPosition = nameTagPosition.takeIf {
                     it in setOf("bottomOverlap", "below", "above")
                 } ?: "bottomOverlap",
+                imageUri = root.optString("imageUri", "")
+                    .takeIf { it.startsWith("content://") },
                 xFraction = position.optDouble("xFraction", 0.78)
                     .toFloat()
                     .coerceIn(0f, 1f),

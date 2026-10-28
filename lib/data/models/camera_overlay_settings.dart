@@ -20,6 +20,7 @@ class CameraOverlaySettings {
     this.nameTagTextColor = -1,
     this.nameTagFont = 'sans-bold',
     this.nameTagPosition = 'bottomOverlap',
+    this.imageUri,
     this.xFraction = 0.78,
     this.yFraction = 0.70,
     this.locked = false,
@@ -56,6 +57,7 @@ class CameraOverlaySettings {
   final int nameTagTextColor;
   final String nameTagFont;
   final String nameTagPosition;
+  final String? imageUri;
   final double xFraction;
   final double yFraction;
   final bool locked;
@@ -81,6 +83,8 @@ class CameraOverlaySettings {
     int? nameTagTextColor,
     String? nameTagFont,
     String? nameTagPosition,
+    String? imageUri,
+    bool clearImageUri = false,
     double? xFraction,
     double? yFraction,
     bool? locked,
@@ -105,6 +109,7 @@ class CameraOverlaySettings {
       nameTagTextColor: nameTagTextColor ?? this.nameTagTextColor,
       nameTagFont: nameTagFont ?? this.nameTagFont,
       nameTagPosition: nameTagPosition ?? this.nameTagPosition,
+      imageUri: clearImageUri ? null : imageUri ?? this.imageUri,
       xFraction: xFraction ?? this.xFraction,
       yFraction: yFraction ?? this.yFraction,
       locked: locked ?? this.locked,
@@ -134,6 +139,7 @@ class CameraOverlaySettings {
       'font': nameTagFont,
       'position': nameTagPosition,
     },
+    'imageUri': imageUri ?? '',
     'position': {
       'xFraction': xFraction,
       'yFraction': yFraction,
@@ -160,6 +166,7 @@ class CameraOverlaySettings {
     final nameTagStyle = _readString(nameTag['style'], 'ribbon');
     final font = _readString(nameTag['font'], 'sans-bold');
     final nameTagPosition = _readString(nameTag['position'], 'bottomOverlap');
+    final imageUri = _readString(value['imageUri'], '').trim();
 
     return CameraOverlaySettings(
       enabled: _readBool(value['enabled'], false),
@@ -189,6 +196,7 @@ class CameraOverlaySettings {
       nameTagPosition: validNameTagPositions.contains(nameTagPosition)
           ? nameTagPosition
           : 'bottomOverlap',
+      imageUri: imageUri.startsWith('content://') ? imageUri : null,
       xFraction: _readFraction(position['xFraction'], 0.78),
       yFraction: _readFraction(position['yFraction'], 0.70),
       locked: _readBool(position['locked'], false),

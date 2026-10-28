@@ -9,7 +9,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.Settings
-import org.json.JSONObject
 import android.content.IntentFilter
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -27,6 +26,7 @@ class MainActivity : FlutterActivity() {
         const val REQUEST_AUDIO_PERMISSION = 1004
         const val REQUEST_NOTIFICATION_PERMISSION = 1005
         const val REQUEST_CAMERA_PERMISSION = 1006
+        const val REQUEST_PICK_CAMERA_IMAGE = 1007
         const val REQUEST_MEDIA_PROJECTION = 1001
     }
 
@@ -36,6 +36,7 @@ class MainActivity : FlutterActivity() {
     private var pendingRecordingsResult: MethodChannel.Result? = null
     private var pendingOverlayResult: MethodChannel.Result? = null
     private var pendingCameraPermissionResult: MethodChannel.Result? = null
+    private var pendingCameraImageResult: MethodChannel.Result? = null
     private var pendingAudioCall: MethodCall? = null
     private var isRecording = false
     private var isPaused = false
@@ -86,6 +87,7 @@ class MainActivity : FlutterActivity() {
                 "getVideoCapabilities" -> handleGetVideoCapabilities(result)
                 "requestOverlayPermission" -> handleOverlayPermission(result)
                 "requestCameraPermission" -> handleCameraPermission(result)
+                "pickCameraImage" -> handlePickCameraImage(result)
                 else -> result.notImplemented()
             }
         }
@@ -162,7 +164,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun prepareStartRecording(call: MethodCall, result: MethodChannel.Result) {
-        if (isCameraEnabled(cameraConfigFor(call)) &&
+        if (requiresLiveCameraPermission(cameraConfigFor(call)) &&
             checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
         ) {
             pendingAudioCall = call
@@ -219,6 +221,12 @@ class MainActivity : FlutterActivity() {
             "cameraConfigJson" to cameraConfigFor(call),
             "sourceWidth" to sourceWidth,
             "sourceHeight" to sourceHeight,
+            "microphoneGain" to (call.argument<Double>("microphoneGain") ?: 1.0)
+                .coerceIn(0.0, 2.0),
+            "gameAudioGain" to (call.argument<Double>("gameAudioGain") ?: 1.0)
+                .coerceIn(0.0, 2.0),
+            "microphoneNoiseSuppression" to
+                (call.argument<Boolean>("microphoneNoiseSuppression") ?: false),
         )
         persistRecordingParams(pendingParams!!)
         val cameraConfig = CameraOverlayConfig.fromJson(
@@ -268,6 +276,12 @@ class MainActivity : FlutterActivity() {
             .putString("orientation", params["orientation"] as? String ?: "auto")
             .putString("bitratePreset", params["bitratePreset"] as? String ?: "custom")
             .putString("cameraConfigJson", params["cameraConfigJson"] as? String ?: "{}")
+            .putFloat("microphoneGain", (params["microphoneGain"] as? Double ?: 1.0).toFloat())
+            .putFloat("gameAudioGain", (params["gameAudioGain"] as? Double ?: 1.0).toFloat())
+            .putBoolean(
+                "microphoneNoiseSuppression",
+                params["microphoneNoiseSuppression"] as? Boolean ?: false,
+            )
             .apply()
         }
 
@@ -277,8 +291,38 @@ class MainActivity : FlutterActivity() {
                 getSharedPreferences("b13_falcon_recording", MODE_PRIVATE),
             )
 
-    private fun isCameraEnabled(cameraConfigJson: String): Boolean =
-        JSONObject(cameraConfigJson).optBoolean("enabled", false)
+    private fun requiresLiveCameraPermission(cameraConfigJson: String): Boolean {
+        val config = CameraOverlayConfig.fromJson(cameraConfigJson)
+        return config.enabled && config.imageUri.isNullOrBlank()
+    }
+
+    private fun handlePickCameraImage(result: MethodChannel.Result) {
+        if (pendingCameraImageResult != null) {
+            result.error("PICKER_PENDING", "O seletor de imagem já está aberto.", null)
+            return
+        }
+        pendingCameraImageResult = result
+        try {
+            startActivityForResult(
+                Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "image/*"
+                    addFlags(
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION,
+                    )
+                },
+                REQUEST_PICK_CAMERA_IMAGE,
+            )
+        } catch (error: Exception) {
+            pendingCameraImageResult = null
+            result.error(
+                "IMAGE_PICKER_FAILED",
+                error.message ?: "Não foi possível abrir as imagens.",
+                null,
+            )
+        }
+    }
 
     private fun currentDisplaySizeForOrientation(requestedOrientation: String): Pair<Int, Int> {
         val metrics = android.util.DisplayMetrics()
@@ -348,7 +392,8 @@ class MainActivity : FlutterActivity() {
                     )
                     return
                 }
-                if (checkSelfPermission(Manifest.permission.CAMERA) !=
+                if (config.imageUri.isNullOrBlank() &&
+                    checkSelfPermission(Manifest.permission.CAMERA) !=
                     PackageManager.PERMISSION_GRANTED
                 ) {
                     result.error(
@@ -609,6 +654,12 @@ class MainActivity : FlutterActivity() {
             "orientation" to (call.argument<String>("orientation") ?: "auto"),
             "bitratePreset" to (call.argument<String>("bitratePreset") ?: "custom"),
             "cameraConfigJson" to cameraConfigFor(call),
+            "microphoneGain" to (call.argument<Double>("microphoneGain") ?: 1.0)
+                .coerceIn(0.0, 2.0),
+            "gameAudioGain" to (call.argument<Double>("gameAudioGain") ?: 1.0)
+                .coerceIn(0.0, 2.0),
+            "microphoneNoiseSuppression" to
+                (call.argument<Boolean>("microphoneNoiseSuppression") ?: false),
         )
         persistRecordingParams(params)
         if (!enabled) {
@@ -717,6 +768,27 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_PICK_CAMERA_IMAGE) {
+            val result = pendingCameraImageResult
+            pendingCameraImageResult = null
+            val imageUri = data?.data
+            if (resultCode != RESULT_OK || imageUri == null) {
+                result?.success(null)
+                return
+            }
+            try {
+                val readPermission = data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION
+                contentResolver.takePersistableUriPermission(imageUri, readPermission)
+                result?.success(imageUri.toString())
+            } catch (error: SecurityException) {
+                result?.error(
+                    "IMAGE_PERMISSION_FAILED",
+                    error.message ?: "Não foi possível guardar o acesso à imagem.",
+                    null,
+                )
+            }
+            return
+        }
         if (requestCode == REQUEST_MEDIA_PROJECTION) {
             val result = pendingStartResult
             pendingStartResult = null

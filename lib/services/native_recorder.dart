@@ -38,6 +38,14 @@ class RecordingNativeBridge {
     }
   }
 
+  Future<String?> pickCameraImage() async {
+    try {
+      return await _channel.invokeMethod<String>('pickCameraImage');
+    } on PlatformException {
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> getVideoCapabilities() async {
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
@@ -62,6 +70,9 @@ class RecordingNativeBridge {
     required String orientation,
     required String bitratePreset,
     required String cameraConfigJson,
+    required double microphoneGain,
+    required double gameAudioGain,
+    required bool microphoneNoiseSuppression,
   }) async {
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
@@ -79,6 +90,9 @@ class RecordingNativeBridge {
           'orientation': orientation,
           'bitratePreset': bitratePreset,
           'cameraConfigJson': cameraConfigJson,
+          'microphoneGain': microphoneGain,
+          'gameAudioGain': gameAudioGain,
+          'microphoneNoiseSuppression': microphoneNoiseSuppression,
         },
       );
       return Map<String, dynamic>.from(result ?? const <dynamic, dynamic>{});
@@ -196,6 +210,9 @@ class RecordingNativeBridge {
     required String orientation,
     required String bitratePreset,
     required String cameraConfigJson,
+    required double microphoneGain,
+    required double gameAudioGain,
+    required bool microphoneNoiseSuppression,
   }) async {
     return await _channel.invokeMethod<bool>('setFloatingControls', {
           'enabled': enabled,
@@ -209,6 +226,9 @@ class RecordingNativeBridge {
           'orientation': orientation,
           'bitratePreset': bitratePreset,
           'cameraConfigJson': cameraConfigJson,
+          'microphoneGain': microphoneGain,
+          'gameAudioGain': gameAudioGain,
+          'microphoneNoiseSuppression': microphoneNoiseSuppression,
         }) ??
         false;
   }

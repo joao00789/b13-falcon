@@ -52,7 +52,11 @@
         <service
             android:name=".CameraOverlayService"
             android:exported="false"
-            android:foregroundServiceType="camera" />
+            android:foregroundServiceType="camera|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-selected floating image or camera preview" />
+        </service>
 
         <service
             android:name=".FloatingControlsService"

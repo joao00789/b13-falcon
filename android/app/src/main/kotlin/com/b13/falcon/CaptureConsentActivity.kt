@@ -128,6 +128,27 @@ class CaptureConsentActivity : Activity() {
                     intent.getIntExtra("sourceHeight", 0),
                 )
                 putExtra("cameraConfigJson", cameraConfigJson)
+                putExtra(
+                    "microphoneGain",
+                    intent.getDoubleExtra(
+                        "microphoneGain",
+                        preferences.getFloat("microphoneGain", 1f).toDouble(),
+                    ),
+                )
+                putExtra(
+                    "gameAudioGain",
+                    intent.getDoubleExtra(
+                        "gameAudioGain",
+                        preferences.getFloat("gameAudioGain", 1f).toDouble(),
+                    ),
+                )
+                putExtra(
+                    "microphoneNoiseSuppression",
+                    intent.getBooleanExtra(
+                        "microphoneNoiseSuppression",
+                        preferences.getBoolean("microphoneNoiseSuppression", false),
+                    ),
+                )
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

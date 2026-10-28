@@ -14,6 +14,9 @@ class AppSettings {
     this.floatingLogoOpacity = 0.85,
     this.floatingLogoSizeDp = 56,
     this.useInternalAudio = false,
+    this.microphoneGain = 1,
+    this.gameAudioGain = 1,
+    this.microphoneNoiseSuppression = false,
     this.themeAccent = 'falcon',
     this.codec = 'h264',
     this.orientation = 'auto',
@@ -70,6 +73,9 @@ class AppSettings {
   final double floatingLogoOpacity;
   final int floatingLogoSizeDp;
   final bool useInternalAudio;
+  final double microphoneGain;
+  final double gameAudioGain;
+  final bool microphoneNoiseSuppression;
   final String themeAccent;
   final String codec;
   final String orientation;
@@ -87,6 +93,9 @@ class AppSettings {
     double? floatingLogoOpacity,
     int? floatingLogoSizeDp,
     bool? useInternalAudio,
+    double? microphoneGain,
+    double? gameAudioGain,
+    bool? microphoneNoiseSuppression,
     String? themeAccent,
     String? codec,
     String? orientation,
@@ -104,6 +113,10 @@ class AppSettings {
       floatingLogoOpacity: floatingLogoOpacity ?? this.floatingLogoOpacity,
       floatingLogoSizeDp: floatingLogoSizeDp ?? this.floatingLogoSizeDp,
       useInternalAudio: useInternalAudio ?? this.useInternalAudio,
+      microphoneGain: microphoneGain ?? this.microphoneGain,
+      gameAudioGain: gameAudioGain ?? this.gameAudioGain,
+      microphoneNoiseSuppression:
+          microphoneNoiseSuppression ?? this.microphoneNoiseSuppression,
       themeAccent: themeAccent ?? this.themeAccent,
       codec: codec ?? this.codec,
       orientation: orientation ?? this.orientation,
@@ -136,6 +149,9 @@ class AppSettings {
     'floatingLogoOpacity': floatingLogoOpacity,
     'floatingLogoSizeDp': floatingLogoSizeDp,
     'useInternalAudio': useInternalAudio,
+    'microphoneGain': microphoneGain,
+    'gameAudioGain': gameAudioGain,
+    'microphoneNoiseSuppression': microphoneNoiseSuppression,
     'themeAccent': themeAccent,
     'codec': codec,
     'orientation': orientation,
@@ -153,6 +169,8 @@ class AppSettings {
         : 0.85;
     final size = _readInt(json['floatingLogoSizeDp'], 56);
     final bitrate = _readInt(json['bitrateKbps'], 16000);
+    final microphoneGain = json['microphoneGain'];
+    final gameAudioGain = json['gameAudioGain'];
     final cameraConfig = json['cameraConfigJson'] == null
         ? CameraOverlaySettings.fromLegacy(json)
         : CameraOverlaySettings.fromJson(json['cameraConfigJson']);
@@ -170,6 +188,22 @@ class AppSettings {
       floatingLogoOpacity: opacity,
       floatingLogoSizeDp: size.clamp(32, 96).toInt(),
       useInternalAudio: _readBool(json['useInternalAudio'], false),
+      microphoneGain:
+          (microphoneGain is num && microphoneGain.isFinite
+                  ? microphoneGain.toDouble()
+                  : 1)
+              .clamp(0, 2)
+              .toDouble(),
+      gameAudioGain:
+          (gameAudioGain is num && gameAudioGain.isFinite
+                  ? gameAudioGain.toDouble()
+                  : 1)
+              .clamp(0, 2)
+              .toDouble(),
+      microphoneNoiseSuppression: _readBool(
+        json['microphoneNoiseSuppression'],
+        false,
+      ),
       themeAccent: _validThemes.contains(theme) ? theme : 'falcon',
       codec: json['codec'] == 'hevc' ? 'hevc' : 'h264',
       orientation: switch (json['orientation']) {

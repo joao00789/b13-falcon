@@ -364,9 +364,9 @@ class ThemePreviewCard extends StatelessWidget {
           duration: reduceAnimations
               ? Duration.zero
               : const Duration(milliseconds: 220),
-          width: 168,
+          width: 184,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24),
             border: Border.all(
               color: selected ? themeData.secondary : Colors.white24,
               width: selected ? 2.2 : 1,
@@ -421,7 +421,7 @@ class ThemePreviewCard extends StatelessWidget {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(14),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -446,12 +446,12 @@ class ThemePreviewCard extends StatelessWidget {
                               const SizedBox(width: 7),
                               const Expanded(
                                 child: Text(
-                                  'PRÉVIA DO TEMA',
+                                  'IDENTIDADE VISUAL',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: Colors.white70,
-                                    fontSize: 9,
+                                    fontSize: 8,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 1,
                                   ),
@@ -485,9 +485,44 @@ class ThemePreviewCard extends StatelessWidget {
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w900,
-                              fontSize: 19,
+                              fontSize: 22,
                               height: 1.05,
                             ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              for (final color in [
+                                themeData.accent,
+                                themeData.secondary,
+                                themeData.surface,
+                              ])
+                                Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  width: 23,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: color.withValues(alpha: 0.32),
+                                        blurRadius: 7,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              const Spacer(),
+                              Text(
+                                'PALETA',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.68),
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                            ],
                           ),
                           const Spacer(),
                           Container(

@@ -18,6 +18,7 @@ import android.hardware.display.VirtualDisplay
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.audiofx.NoiseSuppressor
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaCodecList
@@ -47,6 +48,7 @@ import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
+import kotlin.math.exp
 import androidx.core.app.NotificationCompat
 
 class RecordingService : Service() {
@@ -119,6 +121,7 @@ class RecordingService : Service() {
     private var encoderInputSurface: Surface? = null
     private var microphoneRecorder: AudioRecord? = null
     private var playbackRecorder: AudioRecord? = null
+    private var microphoneNoiseSuppressor: NoiseSuppressor? = null
     private var muxer: MediaMuxer? = null
     private var outputUri: Uri? = null
     private var outputFile: File? = null
@@ -149,6 +152,9 @@ class RecordingService : Service() {
     private var microphoneRequired = false
     private var playbackRequired = false
     private var audioChannelCount = 1
+    private var microphoneGain = 1f
+    private var gameAudioGain = 1f
+    private var microphoneNoiseSuppression = false
     private var videoTrack = -1
     private var audioTrack = -1
     @Volatile private var stopping = false
@@ -316,6 +322,14 @@ class RecordingService : Service() {
         frameRate = (intent.getIntExtra("fps", 30)).coerceIn(15, 90)
         bitRate = (intent.getIntExtra("bitrateKbps", 16000).coerceIn(4_000, 80_000)) * 1000
         cameraConfig = cameraConfigFor(intent)
+        microphoneGain = intent.getDoubleExtra("microphoneGain", 1.0)
+            .toFloat()
+            .coerceIn(0f, 2f)
+        gameAudioGain = intent.getDoubleExtra("gameAudioGain", 1.0)
+            .toFloat()
+            .coerceIn(0f, 2f)
+        microphoneNoiseSuppression =
+            intent.getBooleanExtra("microphoneNoiseSuppression", false)
         frontCameraEnabled = cameraConfig.enabled
         cameraFailureMessage = null
         val requestedMime = if (intent.getStringExtra("codec") == "hevc") HEVC_MIME else VIDEO_MIME
@@ -774,6 +788,29 @@ class RecordingService : Service() {
                     throw IOException("O microfone não pôde ser inicializado.")
                 }
             }
+            if (microphoneNoiseSuppression && NoiseSuppressor.isAvailable()) {
+                try {
+                    microphoneNoiseSuppressor = NoiseSuppressor
+                        .create(microphoneRecorder!!.audioSessionId)
+                        ?.apply { enabled = true }
+                    if (microphoneNoiseSuppressor == null) {
+                        android.util.Log.w(
+                            "B13FalconAudio",
+                            "O filtro de redução de ruído não pôde ser criado neste aparelho.",
+                        )
+                    }
+                } catch (error: RuntimeException) {
+                    android.util.Log.w(
+                        "B13FalconAudio",
+                        "Redução de ruído indisponível: ${error.message}",
+                    )
+                }
+            } else if (microphoneNoiseSuppression) {
+                android.util.Log.w(
+                    "B13FalconAudio",
+                    "Este aparelho não disponibiliza redução de ruído por hardware.",
+                )
+            }
         }
 
         if (playbackRequired) {
@@ -958,15 +995,7 @@ class RecordingService : Service() {
             for (index in 0 until AUDIO_FRAME_SAMPLES) {
                 val mic = microphone?.getOrNull(index)?.toInt() ?: 0
                 val game = playback?.getOrNull(index)?.toInt() ?: 0
-                val combined = when {
-                    microphone != null && playback != null -> (mic + game) / 2
-                    microphone != null -> mic
-                    playback != null -> game
-                    else -> 0
-                }
-                inputBuffer.putShort(
-                    combined.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort(),
-                )
+                inputBuffer.putShort(limitMixedSample(mic, game))
             }
             audioCodec.queueInputBuffer(
                 inputIndex,
@@ -1011,8 +1040,9 @@ class RecordingService : Service() {
                 ?.order(java.nio.ByteOrder.LITTLE_ENDIAN) ?: continue
             inputBuffer.clear()
             for (sample in frame) {
-                inputBuffer.putShort(sample)
+                inputBuffer.putShort(limitSample(sample / 32768f * gameAudioGain))
             }
+
             audioCodec.queueInputBuffer(
                 inputIndex,
                 0,
@@ -1033,6 +1063,27 @@ class RecordingService : Service() {
                 MediaCodec.BUFFER_FLAG_END_OF_STREAM,
             )
         }
+    }
+
+    private fun limitMixedSample(microphone: Int, playback: Int): Short {
+        val mixed =
+            microphone / 32768f * microphoneGain + playback / 32768f * gameAudioGain
+        return limitSample(mixed)
+    }
+
+    private fun limitSample(sample: Float): Short {
+        val magnitude = kotlin.math.abs(sample)
+        val limited = when {
+            sample > 0.85f ->
+                0.85f + 0.15f * (1f - exp(-(magnitude - 0.85f) / 0.15f))
+            sample < -0.85f ->
+                -(0.85f + 0.15f * (1f - exp(-(magnitude - 0.85f) / 0.15f)))
+            else -> sample
+        }
+        return (limited * Short.MAX_VALUE)
+            .toInt()
+            .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            .toShort()
     }
 
     private fun openOutput() {
@@ -1268,6 +1319,8 @@ class RecordingService : Service() {
                 runCatching { audioEncoder?.stop() }
                 runCatching { audioEncoder?.release() }
                 audioEncoder = null
+                runCatching { microphoneNoiseSuppressor?.release() }
+                microphoneNoiseSuppressor = null
                 runCatching { microphoneRecorder?.release() }
                 microphoneRecorder = null
                 runCatching { playbackRecorder?.release() }

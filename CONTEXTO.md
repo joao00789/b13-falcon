@@ -3,7 +3,7 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual em desenvolvimento: `1.2.12+24`; branch `main`; `v1.2.6` é a última release publicada.
+- Versão atual em desenvolvimento: `1.2.13+25`; branch `main`; `v1.2.12` é a última tag enviada ao GitHub.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
 - `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos, configuração do overlay e consentimento MediaProjection quando a gravação começa no app.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
@@ -33,24 +33,35 @@
 - `codec`: `h264 | hevc`; HEVC só é selecionado quando suportado pela combinação de formato.
 - `orientation`: `auto | portrait | landscape`.
 - `audioMode`: `both | internal | microphone | none`; valores legados em português são normalizados.
+- `microphoneGain` e `gameAudioGain`: ganho independente de 0 a 2; o limitador suave reduz clipping na soma dos canais.
+- `microphoneNoiseSuppression`: tenta ativar o cancelamento de ruído nativo quando o aparelho oferece o efeito.
 - A captura de áudio interno exige Android 10+ e pode ser bloqueada pela aplicação capturada. Microfone exige `RECORD_AUDIO`.
 - `themeAccent` seleciona os temas animados Falcon, Ocean, Emerald ou Violet; animações respeitam a preferência de reduzir movimento do sistema.
-- `cameraOverlay` (`cameraConfigJson` no MethodChannel/SharedPreferences): configuração única com câmera ativada, formato `circle | rounded | square`, tamanho 80–260 dp, espelho, cor ARGB livre, estilo e largura da borda, faixa/nome e posição normalizada/trava. Requer permissão `CAMERA` quando ativada.
+- `cameraOverlay` (`cameraConfigJson` no MethodChannel/SharedPreferences): configuração única com câmera ao vivo ou imagem fixa selecionada no aparelho, formato `circle | rounded | square`, tamanho 80–260 dp, espelho, cor ARGB livre, estilo e largura da borda, faixa/nome e posição normalizada/trava. A permissão `CAMERA` é necessária apenas para usar a câmera ao vivo.
 
 ## Funcionalidades atuais
 
 - Gravação de tela MP4, pausa/retomada, controles de notificação e overlay persistente.
 - Ajustes de resolução, FPS, bitrate, HEVC/H.264, orientação e modo de áudio.
+- Ganho independente de microfone e áudio do jogo, limitador suave para mistura e redução de ruído opcional quando suportada pelo hardware.
 - Ferramentas flutuantes de desenho: traço livre, caixa, círculo, cores, espessura/opacidade, desfazer e limpar.
 - Biblioteca MediaStore com listar, abrir via reprodutor externo e excluir gravações.
 - Preferências persistidas localmente em `SharedPreferences`.
 - Câmera frontal com prévia CameraX em janela flutuante e compositor antigo preservado como alternativa `baked`; a inclusão da janela no vídeo requer validação em aparelho.
+- Opção de substituir a imagem ao vivo por uma imagem local na facecam, sem solicitar permissão de câmera; a câmera continua disponível como alternativa.
 - O fluxo iniciado pelo flutuante inicia a prévia da câmera após a solicitação de notificações; gravações iniciadas na tela inicial enviam dimensões reais do display ao serviço nativo.
 - Bordas da facecam personalizáveis entre estilos sólido, tracejado, duplo, gradiente e brilho; a cor aceita ajuste HSV, alfa e hexadecimal ARGB.
 - Abas inferiores Vídeos, Capturas, Ajustes e Ajuda; as notificações oferecem Iniciar quando ocioso e Pausar/Retomar e Pincel durante a gravação.
 - Lucide SVGs e licença ISC em `assets/icons/lucide/`; drawables vetoriais Android equivalentes em `android/app/src/main/res/drawable/`.
 
 ## Changelog (cronológico)
+
+### 2026-10-27 — Imagem na facecam, controles de áudio e temas refinados
+
+- Adicionada a escolha entre câmera ao vivo e imagem do aparelho, usando o seletor de documentos do Android e permissão persistente da imagem; o recorte, a borda e a posição continuam compartilhados.
+- Adicionados ganho independente de microfone e áudio interno, limitador suave contra clipping e opção de redução de ruído por hardware, quando disponível.
+- Refeito o card de temas com melhor hierarquia visual, indicação de seleção e amostras de paleta.
+- Atualizada a versão para `1.2.13+25`; `dart format`, `flutter analyze` e `flutter test` aprovados. A compilação nativa e o teste em aparelho ainda precisam ser feitos, pois não há Android SDK nem Gradle Wrapper neste ambiente.
 
 ### 2026-10-27 — Corrige inicialização da facecam pelo flutuante
 

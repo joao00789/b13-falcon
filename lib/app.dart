@@ -168,6 +168,9 @@ class _B13FalconAppState extends State<B13FalconApp> {
           orientation: settings.orientation,
           bitratePreset: settings.bitratePreset,
           cameraConfigJson: settings.cameraOverlay.configJson,
+          microphoneGain: settings.microphoneGain,
+          gameAudioGain: settings.gameAudioGain,
+          microphoneNoiseSuppression: settings.microphoneNoiseSuppression,
         );
         if (!enabled) {
           settings = settings.copyWith(showFloatingControls: false);
@@ -283,6 +286,9 @@ class _B13FalconAppState extends State<B13FalconApp> {
         orientation: _settings.orientation,
         bitratePreset: _settings.bitratePreset,
         cameraConfigJson: _settings.cameraOverlay.configJson,
+        microphoneGain: _settings.microphoneGain,
+        gameAudioGain: _settings.gameAudioGain,
+        microphoneNoiseSuppression: _settings.microphoneNoiseSuppression,
       );
       if (!mounted) return;
       if (result['success'] == true) {
@@ -351,8 +357,13 @@ class _B13FalconAppState extends State<B13FalconApp> {
   }
 
   Future<void> _saveSettings(AppSettings nextSettings) async {
-    if (nextSettings.cameraOverlay.enabled &&
-        !_settings.cameraOverlay.enabled) {
+    final needsLiveCamera =
+        nextSettings.cameraOverlay.enabled &&
+        nextSettings.cameraOverlay.imageUri == null;
+    final previouslyUsedLiveCamera =
+        _settings.cameraOverlay.enabled &&
+        _settings.cameraOverlay.imageUri == null;
+    if (needsLiveCamera && !previouslyUsedLiveCamera) {
       try {
         final granted = await _nativeRecorder.requestCameraPermission();
         if (!granted) {
@@ -376,36 +387,32 @@ class _B13FalconAppState extends State<B13FalconApp> {
           cameraOverlay: nextSettings.cameraOverlay.copyWith(enabled: false),
         );
       }
-      if (nextSettings.cameraOverlay.enabled) {
-        try {
-          final granted = await _nativeRecorder.requestOverlayPermission();
-          if (!granted) {
-            _showMessage(
-              'A permissão de sobreposição é necessária para exibir a câmera '
-              'flutuante sobre o jogo.',
-            );
-            nextSettings = nextSettings.copyWith(
-              cameraOverlay: nextSettings.cameraOverlay.copyWith(
-                enabled: false,
-              ),
-            );
-          }
-        } on PlatformException catch (error) {
+    }
+    if (nextSettings.cameraOverlay.enabled &&
+        !_settings.cameraOverlay.enabled) {
+      try {
+        final granted = await _nativeRecorder.requestOverlayPermission();
+        if (!granted) {
           _showMessage(
-            error.message ??
-                'Não foi possível autorizar a câmera flutuante na tela.',
-          );
-          nextSettings = nextSettings.copyWith(
-            cameraOverlay: nextSettings.cameraOverlay.copyWith(enabled: false),
-          );
-        } on MissingPluginException {
-          _showMessage(
-            'A prévia flutuante da câmera está disponível somente no Android.',
+            'A permissão de sobreposição é necessária para exibir a facecam '
+            'sobre outros apps.',
           );
           nextSettings = nextSettings.copyWith(
             cameraOverlay: nextSettings.cameraOverlay.copyWith(enabled: false),
           );
         }
+      } on PlatformException catch (error) {
+        _showMessage(
+          error.message ?? 'Não foi possível autorizar a facecam flutuante.',
+        );
+        nextSettings = nextSettings.copyWith(
+          cameraOverlay: nextSettings.cameraOverlay.copyWith(enabled: false),
+        );
+      } on MissingPluginException {
+        _showMessage('A facecam flutuante está disponível somente no Android.');
+        nextSettings = nextSettings.copyWith(
+          cameraOverlay: nextSettings.cameraOverlay.copyWith(enabled: false),
+        );
       }
     }
     if (nextSettings.showFloatingControls != _settings.showFloatingControls) {
@@ -431,6 +438,9 @@ class _B13FalconAppState extends State<B13FalconApp> {
           orientation: nextSettings.orientation,
           bitratePreset: nextSettings.bitratePreset,
           cameraConfigJson: nextSettings.cameraOverlay.configJson,
+          microphoneGain: nextSettings.microphoneGain,
+          gameAudioGain: nextSettings.gameAudioGain,
+          microphoneNoiseSuppression: nextSettings.microphoneNoiseSuppression,
         );
         if (nextSettings.showFloatingControls && !enabled) {
           nextSettings = nextSettings.copyWith(showFloatingControls: false);
@@ -502,6 +512,9 @@ class _B13FalconAppState extends State<B13FalconApp> {
           orientation: nextSettings.orientation,
           bitratePreset: nextSettings.bitratePreset,
           cameraConfigJson: nextSettings.cameraOverlay.configJson,
+          microphoneGain: nextSettings.microphoneGain,
+          gameAudioGain: nextSettings.gameAudioGain,
+          microphoneNoiseSuppression: nextSettings.microphoneNoiseSuppression,
         );
       } on PlatformException catch (error) {
         _showMessage(
@@ -532,6 +545,18 @@ class _B13FalconAppState extends State<B13FalconApp> {
     if (mounted) setState(() => _settings = nextSettings);
   }
 
+  Future<String?> _pickCameraImage() async {
+    try {
+      return await _nativeRecorder.pickCameraImage();
+    } on PlatformException catch (error) {
+      _showMessage(error.message ?? 'Não foi possível abrir as imagens.');
+      return null;
+    } on MissingPluginException {
+      _showMessage('A escolha de imagem está disponível apenas no Android.');
+      return null;
+    }
+  }
+
   Future<void> _resetSettings() async {
     await _settingsService.resetSettings();
     if (!mounted) return;
@@ -556,6 +581,9 @@ class _B13FalconAppState extends State<B13FalconApp> {
         orientation: _settings.orientation,
         bitratePreset: _settings.bitratePreset,
         cameraConfigJson: _settings.cameraOverlay.configJson,
+        microphoneGain: _settings.microphoneGain,
+        gameAudioGain: _settings.gameAudioGain,
+        microphoneNoiseSuppression: _settings.microphoneNoiseSuppression,
       );
     } on PlatformException catch (error) {
       _showMessage(
@@ -661,6 +689,7 @@ class _B13FalconAppState extends State<B13FalconApp> {
       SettingsPage(
         settings: _settings,
         onChanged: _saveSettings,
+        onPickCameraImage: _pickCameraImage,
         onReset: _resetSettings,
         onBack: _goHome,
         supportedResolutions: _supportedResolutions,

@@ -119,6 +119,7 @@ void main() {
       shape: 'square',
       borderStyle: 'gradient',
       nameTagText: 'B13 FALCON',
+      imageUri: 'content://media/images/123',
     );
     final restored = CameraOverlaySettings.fromJson(camera.configJson);
 
@@ -127,6 +128,28 @@ void main() {
     expect(restored.shape, 'square');
     expect(restored.borderStyle, 'gradient');
     expect(restored.nameTagText, 'B13 FALCON');
+    expect(restored.imageUri, 'content://media/images/123');
+    expect(restored.copyWith(clearImageUri: true).imageUri, isNull);
+  });
+
+  test('audio enhancements settings persist and clamp safely', () {
+    final settings = AppSettings.fromJson(
+      const AppSettings(
+        microphoneGain: 1.6,
+        gameAudioGain: 0.7,
+        microphoneNoiseSuppression: true,
+      ).toJson(),
+    );
+    expect(settings.microphoneGain, 1.6);
+    expect(settings.gameAudioGain, 0.7);
+    expect(settings.microphoneNoiseSuppression, isTrue);
+
+    final recovered = AppSettings.fromJson({
+      'microphoneGain': 3,
+      'gameAudioGain': -1,
+    });
+    expect(recovered.microphoneGain, 2);
+    expect(recovered.gameAudioGain, 0);
   });
 
   testWidgets('B13 FALCON app loads', (tester) async {

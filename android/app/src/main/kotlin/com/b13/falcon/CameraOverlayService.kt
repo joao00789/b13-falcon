@@ -8,8 +8,11 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -18,7 +21,9 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.Toast
+import java.io.IOException
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -41,11 +46,14 @@ class CameraOverlayService : LifecycleService() {
     private var config = CameraOverlayConfig.fromJson("{}")
     private var cameraProvider: ProcessCameraProvider? = null
     private var previewView: PreviewView? = null
+    private var imageView: ImageView? = null
     private var previewFrame: CameraFrameView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var cameraUseCase: Preview? = null
     private var overlayAdded = false
     private var cameraBinding = false
+    private var cameraBindingGeneration = 0
+    private var imageLoadGeneration = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -88,15 +96,18 @@ class CameraOverlayService : LifecycleService() {
             failCamera("A permissão para mostrar a câmera flutuante foi revogada.")
             return
         }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
+        val showingImage = !config.imageUri.isNullOrBlank()
+        if (!showingImage &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             failCamera("A permissão da câmera foi revogada.")
             return
         }
 
-        val cameraAlreadyBound = cameraUseCase != null && previewView?.isAttachedToWindow == true
-        startCameraForeground()
+        val cameraAlreadyBound =
+            !showingImage && cameraUseCase != null && previewView?.isAttachedToWindow == true
+        startCameraForeground(useCamera = !showingImage)
         try {
             ensurePreviewWindow()
         } catch (error: WindowManager.BadTokenException) {
@@ -106,14 +117,32 @@ class CameraOverlayService : LifecycleService() {
             failCamera("A permissão para mostrar a câmera flutuante não está ativa.")
             return
         }
+        if (showingImage) {
+            cameraBindingGeneration++
+            cameraBinding = false
+            cameraProvider?.unbindAll()
+            cameraUseCase = null
+            previewView?.visibility = View.GONE
+            imageView?.visibility = View.INVISIBLE
+            loadSelectedImage(Uri.parse(config.imageUri))
+            return
+        }
+        imageLoadGeneration++
+        imageView?.setImageDrawable(null)
+        imageView?.visibility = View.GONE
+        previewView?.visibility = View.VISIBLE
         if (cameraAlreadyBound || cameraBinding) return
 
         val view = previewView ?: return
         val providerFuture = ProcessCameraProvider.getInstance(this)
+        val bindingGeneration = ++cameraBindingGeneration
         cameraBinding = true
         providerFuture.addListener({
+            if (bindingGeneration != cameraBindingGeneration) return@addListener
             cameraBinding = false
-            if (previewView !== view || !view.isAttachedToWindow) return@addListener
+            if (config.imageUri != null || previewView !== view || !view.isAttachedToWindow) {
+                return@addListener
+            }
             try {
                 val provider = providerFuture.get()
                 cameraProvider = provider
@@ -133,6 +162,56 @@ class CameraOverlayService : LifecycleService() {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    private fun loadSelectedImage(uri: Uri) {
+        val generation = ++imageLoadGeneration
+        val targetSize = dp(config.sizeDp)
+        Thread({
+            try {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                contentResolver.openInputStream(uri)?.use {
+                    BitmapFactory.decodeStream(it, null, bounds)
+                } ?: throw IOException("Não foi possível abrir a imagem selecionada.")
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                    throw IOException("O arquivo selecionado não contém uma imagem válida.")
+                }
+                var sampleSize = 1
+                val longestSide = maxOf(bounds.outWidth, bounds.outHeight)
+                while (longestSide / (sampleSize * 2) >= targetSize) {
+                    sampleSize *= 2
+                }
+                val options = BitmapFactory.Options().apply {
+                    inSampleSize = sampleSize
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                }
+                val bitmap = contentResolver.openInputStream(uri)?.use {
+                    BitmapFactory.decodeStream(it, null, options)
+                } ?: throw IOException("Não foi possível decodificar a imagem selecionada.")
+                android.os.Handler(mainLooper).post {
+                    if (generation != imageLoadGeneration ||
+                        config.imageUri != uri.toString() ||
+                        imageView?.isAttachedToWindow != true
+                    ) {
+                        bitmap.recycle()
+                        return@post
+                    }
+                    imageView?.apply {
+                        setImageBitmap(bitmap)
+                        visibility = View.VISIBLE
+                    }
+                }
+            } catch (error: Exception) {
+                android.os.Handler(mainLooper).post {
+                    if (generation == imageLoadGeneration) {
+                        failCamera(
+                            error.message
+                                ?: "Não foi possível carregar a imagem selecionada.",
+                        )
+                    }
+                }
+            }
+        }, "B13FalconImageLoader").start()
+    }
+
     private fun ensurePreviewWindow() {
         val sizePx = dp(config.sizeDp)
         if (previewFrame != null && overlayAdded) {
@@ -150,10 +229,21 @@ class CameraOverlayService : LifecycleService() {
             scaleType = PreviewView.ScaleType.FILL_CENTER
             setBackgroundColor(Color.TRANSPARENT)
         }
+        val image = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            visibility = View.GONE
+        }
         val frame = CameraFrameView(this).apply {
             elevation = dp(12).toFloat()
             addView(
                 view,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            addView(
+                image,
                 FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.MATCH_PARENT,
@@ -181,6 +271,7 @@ class CameraOverlayService : LifecycleService() {
         }
         frame.setOnTouchListener(createDragListener(frame, params))
         previewView = view
+        imageView = image
         previewFrame = frame
         layoutParams = params
         applyFrameStyle()
@@ -255,7 +346,7 @@ class CameraOverlayService : LifecycleService() {
         )
     }
 
-    private fun startCameraForeground() {
+    private fun startCameraForeground(useCamera: Boolean) {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Câmera frontal ativa")
             .setContentText("A prévia flutuante está pronta.")
@@ -272,11 +363,17 @@ class CameraOverlayService : LifecycleService() {
                 ),
             )
             .build()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= 34 && !useCamera) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                if (useCamera) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0,
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)
@@ -298,6 +395,8 @@ class CameraOverlayService : LifecycleService() {
     }
 
     private fun releaseCameraAndWindow() {
+        cameraBindingGeneration++
+        imageLoadGeneration++
         cameraProvider?.unbindAll()
         cameraProvider = null
         cameraUseCase = null
@@ -309,6 +408,7 @@ class CameraOverlayService : LifecycleService() {
         overlayAdded = false
         previewFrame = null
         previewView = null
+        imageView = null
         layoutParams = null
     }
 
