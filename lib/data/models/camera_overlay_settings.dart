@@ -196,7 +196,7 @@ class CameraOverlaySettings {
       nameTagPosition: validNameTagPositions.contains(nameTagPosition)
           ? nameTagPosition
           : 'bottomOverlap',
-      imageUri: imageUri.startsWith('content://') ? imageUri : null,
+      imageUri: _isSupportedImageUri(imageUri) ? imageUri : null,
       xFraction: _readFraction(position['xFraction'], 0.78),
       yFraction: _readFraction(position['yFraction'], 0.70),
       locked: _readBool(position['locked'], false),
@@ -229,6 +229,9 @@ class CameraOverlaySettings {
 
   static bool _readBool(Object? value, bool fallback) =>
       value is bool ? value : fallback;
+
+  static bool _isSupportedImageUri(String uri) =>
+      uri.startsWith('content://') || uri.startsWith('file://');
 
   static int _readColor(Object? value, int fallback) {
     if (value is! num || !value.isFinite) return fallback;

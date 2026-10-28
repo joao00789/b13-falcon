@@ -24,6 +24,9 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.Toast
 import java.io.IOException
+import java.io.File
+import java.io.FileInputStream
+import java.io.InputStream
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -168,7 +171,7 @@ class CameraOverlayService : LifecycleService() {
         Thread({
             try {
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                contentResolver.openInputStream(uri)?.use {
+                openImageStream(uri)?.use {
                     BitmapFactory.decodeStream(it, null, bounds)
                 } ?: throw IOException("Não foi possível abrir a imagem selecionada.")
                 if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
@@ -183,7 +186,7 @@ class CameraOverlayService : LifecycleService() {
                     inSampleSize = sampleSize
                     inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
-                val bitmap = contentResolver.openInputStream(uri)?.use {
+                val bitmap = openImageStream(uri)?.use {
                     BitmapFactory.decodeStream(it, null, options)
                 } ?: throw IOException("Não foi possível decodificar a imagem selecionada.")
                 android.os.Handler(mainLooper).post {
@@ -210,6 +213,21 @@ class CameraOverlayService : LifecycleService() {
                 }
             }
         }, "B13FalconImageLoader").start()
+    }
+
+    private fun openImageStream(uri: Uri): InputStream? {
+        return when (uri.scheme) {
+            "content" -> contentResolver.openInputStream(uri)
+            "file" -> {
+                val imageDirectory = File(filesDir, "camera_overlay").canonicalFile
+                val imageFile = File(uri.path ?: return null).canonicalFile
+                if (imageFile.parentFile != imageDirectory || !imageFile.isFile) {
+                    throw IOException("A imagem salva da facecam não está disponível.")
+                }
+                FileInputStream(imageFile)
+            }
+            else -> throw IOException("O endereço da imagem selecionada não é suportado.")
+        }
     }
 
     private fun ensurePreviewWindow() {

@@ -12,11 +12,16 @@ import android.provider.Settings
 import android.content.IntentFilter
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.util.UUID
 
 class MainActivity : FlutterActivity() {
     companion object {
@@ -307,10 +312,7 @@ class MainActivity : FlutterActivity() {
                 Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
                     type = "image/*"
-                    addFlags(
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION,
-                    )
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 },
                 REQUEST_PICK_CAMERA_IMAGE,
             )
@@ -776,17 +778,7 @@ class MainActivity : FlutterActivity() {
                 result?.success(null)
                 return
             }
-            try {
-                val readPermission = data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION
-                contentResolver.takePersistableUriPermission(imageUri, readPermission)
-                result?.success(imageUri.toString())
-            } catch (error: SecurityException) {
-                result?.error(
-                    "IMAGE_PERMISSION_FAILED",
-                    error.message ?: "Não foi possível guardar o acesso à imagem.",
-                    null,
-                )
-            }
+            copyCameraImageToAppStorage(imageUri, result)
             return
         }
         if (requestCode == REQUEST_MEDIA_PROJECTION) {
@@ -803,6 +795,7 @@ class MainActivity : FlutterActivity() {
                 )
                 return
             }
+
             val serviceIntent = Intent(this, RecordingService::class.java).apply {
                 action = RecordingService.ACTION_START
                 putExtra(RecordingService.EXTRA_RESULT_CODE, resultCode)
@@ -838,6 +831,73 @@ class MainActivity : FlutterActivity() {
             pendingOverlayResult = null
             result?.success(Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this))
         }
+    }
+
+    private fun copyCameraImageToAppStorage(
+        sourceUri: Uri,
+        result: MethodChannel.Result?,
+    ) {
+        Thread({
+            var copiedFile: File? = null
+            try {
+                val imageDirectory = File(filesDir, "camera_overlay")
+                if (!imageDirectory.exists() && !imageDirectory.mkdirs()) {
+                    throw IOException("Não foi possível preparar o armazenamento da facecam.")
+                }
+                val imageFile = File(imageDirectory, "${UUID.randomUUID()}.img")
+                val temporaryFile = File(imageDirectory, "${UUID.randomUUID()}.tmp")
+                try {
+                    val input = contentResolver.openInputStream(sourceUri)
+                        ?: throw IOException("O seletor não forneceu acesso de leitura à imagem.")
+                    input.use { source ->
+                        FileOutputStream(temporaryFile).use { destination ->
+                            source.copyTo(destination)
+                            destination.fd.sync()
+                        }
+                    }
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(temporaryFile.absolutePath, bounds)
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                        throw IOException("O arquivo selecionado não contém uma imagem válida.")
+                    }
+                    if (!temporaryFile.renameTo(imageFile)) {
+                        throw IOException("Não foi possível salvar a imagem selecionada.")
+                    }
+                    copiedFile = imageFile
+                } finally {
+                    if (temporaryFile.exists() && !temporaryFile.delete()) {
+                        android.util.Log.w(
+                            "B13FalconCamera",
+                            "Não foi possível remover um arquivo temporário de imagem.",
+                        )
+                    }
+                }
+            } catch (error: Exception) {
+                android.os.Handler(mainLooper).post {
+                    result?.error(
+                        "IMAGE_COPY_FAILED",
+                        error.message ?: "Não foi possível abrir a imagem selecionada.",
+                        null,
+                    )
+                }
+                return@Thread
+            }
+            val savedFile = copiedFile
+            if (savedFile == null) {
+                android.os.Handler(mainLooper).post {
+                    result?.error(
+                        "IMAGE_COPY_FAILED",
+                        "A cópia da imagem terminou sem gerar um arquivo.",
+                        null,
+                    )
+                }
+                return@Thread
+            }
+            val savedUri = Uri.fromFile(savedFile).toString()
+            android.os.Handler(mainLooper).post {
+                result?.success(savedUri)
+            }
+        }, "B13FalconImageCopy").start()
     }
 
     @Deprecated("Deprecated in Android")

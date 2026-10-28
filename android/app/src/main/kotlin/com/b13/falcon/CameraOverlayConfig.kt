@@ -112,7 +112,7 @@ internal data class CameraOverlayConfig(
                     it in setOf("bottomOverlap", "below", "above")
                 } ?: "bottomOverlap",
                 imageUri = root.optString("imageUri", "")
-                    .takeIf { it.startsWith("content://") },
+                    .takeIf { it.startsWith("content://") || it.startsWith("file://") },
                 xFraction = position.optDouble("xFraction", 0.78)
                     .toFloat()
                     .coerceIn(0f, 1f),

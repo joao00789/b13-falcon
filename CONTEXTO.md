@@ -3,7 +3,7 @@
 ## Visão geral e arquitetura
 
 - Aplicativo Android de gravação de tela, Flutter/Dart na interface e Kotlin nos serviços nativos. Identificador: `com.b13.falcon`.
-- Versão atual em desenvolvimento: `1.2.13+25`; branch `main`; `v1.2.12` é a última tag enviada ao GitHub.
+- Versão atual em desenvolvimento: `1.2.14+26`; branch `main`; `v1.2.13` é a última tag enviada ao GitHub.
 - Flutter coordena navegação, preferências e estado visual em `lib/app.dart`; `RecordingNativeBridge` usa o canal `com.b13.falcon/recorder` para chamar o Android.
 - `MainActivity` atende o MethodChannel, permissões solicitadas dentro do app, biblioteca de vídeos, configuração do overlay e consentimento MediaProjection quando a gravação começa no app.
 - `CaptureConsentActivity` é uma Activity transparente sem interface própria para solicitar consentimento MediaProjection quando a gravação começa pelo overlay. O resultado inicia `RecordingService` diretamente sem abrir ou reordenar `MainActivity`.
@@ -56,9 +56,15 @@
 
 ## Changelog (cronológico)
 
+### 2026-10-27 — Corrige importação da imagem da facecam
+
+- A imagem escolhida agora é copiada em segundo plano para o armazenamento privado do app, validada e usada pela janela CameraX; isso evita depender de permissões temporárias de provedores de galeria para reabrir o arquivo.
+- Mantido suporte a URIs `content://` já salvos; os novos arquivos `file://` são restritos ao diretório privado da facecam.
+- Atualizada a versão para `1.2.14+26`; formatação, análise e testes Flutter aguardam execução no CI porque o SDK Flutter não está disponível neste ambiente. Build Android e confirmação em aparelho também dependem do CI/dispositivo.
+
 ### 2026-10-27 — Imagem na facecam, controles de áudio e temas refinados
 
-- Adicionada a escolha entre câmera ao vivo e imagem do aparelho, usando o seletor de documentos do Android e permissão persistente da imagem; o recorte, a borda e a posição continuam compartilhados.
+- Adicionada a escolha entre câmera ao vivo e imagem do aparelho; a seleção original usa o seletor de documentos do Android, e o app agora copia a imagem para armazenamento privado para uso confiável; o recorte, a borda e a posição continuam compartilhados.
 - Adicionados ganho independente de microfone e áudio interno, limitador suave contra clipping e opção de redução de ruído por hardware, quando disponível.
 - Refeito o card de temas com melhor hierarquia visual, indicação de seleção e amostras de paleta.
 - Atualizada a versão para `1.2.13+25`; `dart format`, `flutter analyze` e `flutter test` aprovados. A compilação nativa e o teste em aparelho ainda precisam ser feitos, pois não há Android SDK nem Gradle Wrapper neste ambiente.

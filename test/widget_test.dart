@@ -130,6 +130,16 @@ void main() {
     expect(restored.nameTagText, 'B13 FALCON');
     expect(restored.imageUri, 'content://media/images/123');
     expect(restored.copyWith(clearImageUri: true).imageUri, isNull);
+
+    final appStoredImage = CameraOverlaySettings.fromJson({
+      'enabled': true,
+      'imageUri':
+          'file:///data/user/0/com.b13.falcon/files/camera_overlay/a.img',
+    });
+    expect(
+      appStoredImage.imageUri,
+      'file:///data/user/0/com.b13.falcon/files/camera_overlay/a.img',
+    );
   });
 
   test('audio enhancements settings persist and clamp safely', () {
